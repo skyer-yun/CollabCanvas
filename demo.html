@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>CollabCanvas Demo</title>
+  <style>
+    body { margin: 0; padding: 20px; font-family: -apple-system, sans-serif; }
+    h1 { color: #1677ff; }
+    .demo-card {
+      display: inline-block; width: 200px; padding: 20px; margin: 10px;
+      background: #fff; border: 1px solid #e8e8e8; border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08); vertical-align: top;
+    }
+    .demo-card h3 { margin: 0 0 8px; font-size: 16px; }
+    .demo-card p { margin: 0; font-size: 13px; color: #666; line-height: 1.5; }
+    .demo-btn {
+      display: inline-block; margin-top: 12px; padding: 6px 16px;
+      background: #1677ff; color: #fff; border: none; border-radius: 4px;
+      font-size: 13px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>CollabCanvas Demo Page</h1>
+  <p>This is a test page. Open it in a browser to see the editor overlay.</p>
+
+  <div class="demo-card">
+    <h3>Card A</h3>
+    <p>Sample content for testing the visual editor.</p>
+    <button class="demo-btn">Action</button>
+  </div>
+
+  <div class="demo-card">
+    <h3>Card B</h3>
+    <p>Another card to test selection and editing features.</p>
+    <button class="demo-btn">Submit</button>
+  </div>
+
+  <div class="demo-card">
+    <h3>Card C</h3>
+    <p>Try drag, resize, rotate, group, align on these elements.</p>
+    <button class="demo-btn">Cancel</button>
+  </div>
+
+  <!-- CollabCanvas: Load all modules in dependency order -->
+  <link rel="stylesheet" href="styles/collabcanvas.css">
+  <script src="core/event-bus.js"></script>
+  <script src="engine/dom-utils.js"></script>
+  <script src="core/persistence.js"></script>
+  <script src="core/state.js"></script>
+  <script src="canvas/canvas-wrapper.js"></script>
+  <script src="canvas/infinite-canvas.js"></script>
+  <script src="engine/change-tracker.js"></script>
+  <script src="engine/selection.js"></script>
+  <script src="engine/text-edit.js"></script>
+  <script src="engine/align.js"></script>
+  <script src="engine/transform.js"></script>
+  <script src="engine/group.js"></script>
+  <script src="engine/clipboard.js"></script>
+  <script src="engine/zorder.js"></script>
+  <script src="engine/element-factory.js"></script>
+  <script src="engine/page-extractor.js"></script>
+  <script src="engine/component-renderer.js"></script>
+  <script src="engine/annotation-exporter.js"></script>
+  <script src="engine/undo-redo.js"></script>
+  <script src="engine/export-engine.js"></script>
+  <script src="core/mode-machine.js"></script>
+  <script src="core/keyboard.js"></script>
+  <script src="ui/toast.js"></script>
+  <script src="ui/modal.js"></script>
+  <script src="ui/context-menu.js"></script>
+  <script src="ui/component-dialog.js"></script>
+  <script src="ui/shell.js"></script>
+  <script src="ui/toolbar.js"></script>
+  <script src="ui/settings-dialog.js"></script>
+  <script src="ui/left-panel.js"></script>
+  <script src="ui/right-panel.js"></script>
+  <script src="ui/statusbar.js"></script>
+  <script src="ui/tabs/layers-tab.js"></script>
+  <script src="ui/tabs/components-tab.js"></script>
+  <script src="ui/tabs/properties-tab.js"></script>
+  <script src="ui/tabs/changes-tab.js"></script>
+  <script src="ui/tabs/notes-annotations-tab.js"></script>
+  <!-- Phase 2 (annotation + styles) -->
+  <script src="annotation/annotator.js"></script>
+  <script src="annotation/tools.js"></script>
+  <script src="annotation/renderer.js"></script>
+  <script src="ui/tabs/annotations-tab.js"></script>
+  <!-- Phase 2 optional (compare + tokens + styles tab) -->
+  <!--
+  <script src="compare/compare-engine.js"></script>
+  <script src="compare/dom-differ.js"></script>
+  <script src="tokens/extractor.js"></script>
+  <script src="tokens/tokenizer.js"></script>
+  <script src="tokens/importer.js"></script>
+  <script src="ui/tabs/styles-tab.js"></script>
+  -->
+  <!-- Phase 3 (optional, uncomment to enable) -->
+  <!--
+  <script src="version/snapshot.js"></script>
+  <script src="version/differ.js"></script>
+  <script src="version/store.js"></script>
+  <script src="loader/html-loader.js"></script>
+  <script src="loader/image-loader.js"></script>
+  <script src="loader/archive-loader.js"></script>
+  <script src="loader/proxy.js"></script>
+  <script src="ui/tabs/pages-tab.js"></script>
+  <script src="ui/tabs/versions-tab.js"></script>
+  -->
+  <script src="main.js"></script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "CollabCanvas",
+  "version": "1.0.0",
+  "description": "Professional visual editor — inspect, annotate, compare, and edit any web page",
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "scripting",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [],
+  "action": {
+    "default_title": "Activate CollabCanvas",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "styles/collabcanvas.css",
+        "core/*.js",
+        "engine/*.js",
+        "canvas/*.js",
+        "ui/*.js",
+        "ui/tabs/*.js",
+        "annotation/*.js",
+        "compare/*.js",
+        "tokens/*.js",
+        "version/*.js",
+        "loader/*.js",
+        "lib/*",
+        "main.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}
