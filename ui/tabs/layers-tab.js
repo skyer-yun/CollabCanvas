@@ -43,9 +43,13 @@
     this._dragSrcIndex = null;
 
     var self = this;
-    bus.on('selection:changed', function () { self.refresh(); });
-    bus.on('history:recorded', function () { self.refresh(); });
-    bus.on('layer:reorder', function () { self.refresh(); });
+    this._onSelectionChanged = function () { self.refresh(); };
+    this._onHistoryRecorded = function () { self.refresh(); };
+    this._onLayerReorder = function () { self.refresh(); };
+
+    bus.on('selection:changed', this._onSelectionChanged);
+    bus.on('history:recorded', this._onHistoryRecorded);
+    bus.on('layer:reorder', this._onLayerReorder);
   }
 
   LayersTab.prototype.render = function (container) {
@@ -252,6 +256,13 @@
       return !/^cc-/.test(c) && c.length > 1;
     });
     return classes.slice(0, 2).join('.');
+  };
+
+  LayersTab.prototype.destroy = function () {
+    if (!this.bus) return;
+    this.bus.off('selection:changed', this._onSelectionChanged);
+    this.bus.off('history:recorded', this._onHistoryRecorded);
+    this.bus.off('layer:reorder', this._onLayerReorder);
   };
 
   window.CCLayersTab = LayersTab;

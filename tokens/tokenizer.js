@@ -41,8 +41,7 @@
 
     var path = 'tokens.' + category;
     var list = this._state.get(path) || [];
-    list.push(token);
-    this._state.set(path, list);
+    this._state.set(path, list.concat([token]));
 
     return token;
   };
@@ -60,8 +59,9 @@
       var list = this._state.get(path) || [];
       for (var j = 0; j < list.length; j++) {
         if (list[j].id === id) {
-          list.splice(j, 1);
-          this._state.set(path, list);
+          var newList = list.slice();
+          newList.splice(j, 1);
+          this._state.set(path, newList);
           return true;
         }
       }
@@ -83,9 +83,15 @@
       var list = this._state.get(path) || [];
       for (var j = 0; j < list.length; j++) {
         if (list[j].id === id) {
-          list[j].value = value;
-          this._state.set(path, list);
-          return list[j];
+          var newList = list.slice();
+          var updated = {};
+          for (var k in newList[j]) {
+            if (newList[j].hasOwnProperty(k)) updated[k] = newList[j][k];
+          }
+          updated.value = value;
+          newList[j] = updated;
+          this._state.set(path, newList);
+          return updated;
         }
       }
     }

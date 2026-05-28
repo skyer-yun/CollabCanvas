@@ -23,6 +23,7 @@
     this._onAnnotationCreated = this._onAnnotationChanged.bind(this);
     this._onAnnotationUpdated = this._onAnnotationChanged.bind(this);
     this._onAnnotationRemoved = this._onAnnotationChanged.bind(this);
+    this._onElementCreated = this._onAnnotationChanged.bind(this);
   }
 
   NotesAnnotationsTab.prototype.render = function (container) {
@@ -41,7 +42,7 @@
     this._bus.on('annotation:created', this._onAnnotationCreated);
     this._bus.on('annotation:updated', this._onAnnotationUpdated);
     this._bus.on('annotation:removed', this._onAnnotationRemoved);
-    this._bus.on('element:created', this._onAnnotationChanged.bind(this));
+    this._bus.on('element:created', this._onElementCreated);
   };
 
   NotesAnnotationsTab.prototype._onAnnotationChanged = function () {
@@ -429,6 +430,15 @@
       return String.fromCharCode(64 + num); // 1→A, 2→B, ...
     }
     return num; // 'auto' and '1,2,3' both use digits
+  };
+
+  NotesAnnotationsTab.prototype.destroy = function () {
+    if (!this._bus || !this._eventsBound) return;
+    this._bus.off('annotation:created', this._onAnnotationCreated);
+    this._bus.off('annotation:updated', this._onAnnotationUpdated);
+    this._bus.off('annotation:removed', this._onAnnotationRemoved);
+    this._bus.off('element:created', this._onElementCreated);
+    this._eventsBound = false;
   };
 
   window.CCNotesAnnotationsTab = NotesAnnotationsTab;

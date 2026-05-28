@@ -59,8 +59,7 @@
     };
 
     var list = this._state.get('annotations.list') || [];
-    list.push(annotation);
-    this._state.set('annotations.list', list);
+    this._state.set('annotations.list', list.concat([annotation]));
 
     if (this._bus) {
       this._bus.emit('annotation:created', annotation);
@@ -94,22 +93,29 @@
 
     // Whitelist of updatable fields
     var allowed = ['type', 'x', 'y', 'w', 'h', 'text', 'color', 'status', 'assignee', 'module', 'priority', 'requirementType', 'acceptanceCriteria'];
+
+    // Create new array + new annotation object (immutable)
+    var newList = list.slice();
+    var updated = {};
+    for (var k in annotation) {
+      if (annotation.hasOwnProperty(k)) updated[k] = annotation[k];
+    }
     for (var j = 0; j < allowed.length; j++) {
       var key = allowed[j];
       if (changes[key] !== undefined) {
-        annotation[key] = changes[key];
+        updated[key] = changes[key];
       }
     }
-    annotation.timestamp = Date.now();
+    updated.timestamp = Date.now();
 
-    list[index] = annotation;
-    this._state.set('annotations.list', list);
+    newList[index] = updated;
+    this._state.set('annotations.list', newList);
 
     if (this._bus) {
-      this._bus.emit('annotation:updated', annotation);
+      this._bus.emit('annotation:updated', updated);
     }
 
-    return annotation;
+    return updated;
   };
 
   /**

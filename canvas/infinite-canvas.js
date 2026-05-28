@@ -43,9 +43,11 @@
    */
   InfiniteCanvas.prototype.setTransform = function(zoom, panX, panY) {
     zoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+    this._state.batch();
     this._state.set('canvas.zoom', zoom);
     this._state.set('canvas.panX', panX);
     this._state.set('canvas.panY', panY);
+    this._state.endBatch();
     this._applyToDOM();
   };
 
@@ -166,9 +168,11 @@
       var x = startPanX + (targetPanX - startPanX) * t;
       var y = startPanY + (targetPanY - startPanY) * t;
 
+      self._state.batch();
       self._state.set('canvas.zoom', z);
       self._state.set('canvas.panX', x);
       self._state.set('canvas.panY', y);
+      self._state.endBatch();
       self._applyToDOM();
 
       if (progress < 1) {
@@ -248,8 +252,10 @@
     var panX = (this._state.get('canvas.panX') || 0) + dx;
     var panY = (this._state.get('canvas.panY') || 0) + dy;
 
+    this._state.batch();
     this._state.set('canvas.panX', panX);
     this._state.set('canvas.panY', panY);
+    this._state.endBatch();
     this._applyToDOM();
   };
 

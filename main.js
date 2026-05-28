@@ -121,7 +121,15 @@
     if (typeof CCAnnotationsTab !== 'undefined') annotationsTab = new CCAnnotationsTab(state, bus);
     if (typeof CCStylesTab !== 'undefined') stylesTab = new CCStylesTab(state, bus);
 
-    // Phase 3 tabs
+    // Store tab references for cleanup
+    CC._tabs = {
+      layersTab: layersTab,
+      propertiesTab: propertiesTab,
+      changesTab: changesTab,
+      notesAnnotationsTab: notesAnnotationsTab,
+      annotationsTab: annotationsTab,
+      stylesTab: stylesTab
+    };
     var pagesTab = null;
     var versionsTab = null;
 
@@ -236,8 +244,11 @@
 
     // ==================== Wire Canvas Events ====================
 
+    // Store DOM handlers for cleanup
+    var _domHandlers = CC._domHandlers = {};
+
     // mousedown on canvas: select / place element
-    canvasEl.addEventListener('mousedown', function(e) {
+    _domHandlers.canvasMousedown = function(e) {
       if (state.paused || modeMachine.current() !== 'edit') return;
       if (dom.isEditorEl(e.target)) return;
 
@@ -271,10 +282,11 @@
       if (state.selected && state.selected.contains(target)) {
         transform.onDragMoveStart(e);
       }
-    });
+    };
+    canvasEl.addEventListener('mousedown', _domHandlers.canvasMousedown);
 
     // mousemove: drag handling
-    document.addEventListener('mousemove', function(e) {
+    _domHandlers.docMousemove = function(e) {
       // Update clipboard mouse position
       state.set('clipboard.mousePos', { x: e.clientX, y: e.clientY });
 
@@ -282,17 +294,19 @@
       if (state.get('drag')) {
         transform.handleDragMove(e);
       }
-    });
+    };
+    document.addEventListener('mousemove', _domHandlers.docMousemove);
 
     // mouseup: end drag
-    document.addEventListener('mouseup', function(e) {
+    _domHandlers.docMouseup = function(e) {
       if (state.get('drag')) {
         transform.handleDragEnd(e);
       }
-    });
+    };
+    document.addEventListener('mouseup', _domHandlers.docMouseup);
 
     // Double click → component dialog or inline text edit
-    canvasEl.addEventListener('dblclick', function(e) {
+    _domHandlers.canvasDblclick = function(e) {
       if (state.paused || modeMachine.current() !== 'edit') return;
       if (dom.isEditorEl(e.target)) return;
       var target = e.target;
@@ -304,10 +318,11 @@
         // Fall back to inline text edit
         textEdit.startInlineEdit(target);
       }
-    });
+    };
+    canvasEl.addEventListener('dblclick', _domHandlers.canvasDblclick);
 
     // Right click → context menu
-    canvasEl.addEventListener('contextmenu', function(e) {
+    _domHandlers.canvasContextmenu = function(e) {
       e.preventDefault();
       if (state.paused) return;
 
@@ -331,10 +346,11 @@
       }
 
       contextMenu.show(e, e.target, actions);
-    });
+    };
+    canvasEl.addEventListener('contextmenu', _domHandlers.canvasContextmenu);
 
     // Click outside → deselect + close context menu
-    document.addEventListener('mousedown', function(e) {
+    _domHandlers.docMousedown = function(e) {
       if (dom.isEditorEl(e.target)) return;
       if (!shellResult.root.contains(e.target)) {
         selection.deselect();
@@ -342,15 +358,17 @@
         transform.removeRotateHandle();
       }
       contextMenu.remove();
-    });
+    };
+    document.addEventListener('mousedown', _domHandlers.docMousedown);
 
     // Wheel → zoom
-    shellResult.viewport.addEventListener('wheel', function(e) {
+    _domHandlers.viewportWheel = function(e) {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         canvas.handleWheel(e);
       }
-    }, { passive: false });
+    };
+    shellResult.viewport.addEventListener('wheel', _domHandlers.viewportWheel, { passive: false });
 
     // ==================== Wire Keyboard Events ====================
     keyboard.setup();
@@ -966,19 +984,23 @@
       });
 
       // Debounced save on state changes
-      var _persistTimer = null;
+      CC._persistTimer = null;
       bus.on('state:changed', function(ev) {
-        // Only persist settings and annotations
-        if (ev.path && (ev.path.indexOf('settings.') === 0 || ev.path === 'annotations.list')) {
-          if (_persistTimer) clearTimeout(_persistTimer);
-          _persistTimer = setTimeout(function() {
-            if (ev.path.indexOf('settings.') === 0) {
-              CCPersistence.save('settings', state.get('settings'));
-            } else if (ev.path === 'annotations.list') {
-              CCPersistence.save('annotations', state.get('annotations.list'));
-            }
-          }, 2000);
-        }
+        // Support both single and batch change events
+        var changes = ev.batch ? ev.changes : [ev];
+        changes.forEach(function(change) {
+          // Only persist settings and annotations
+          if (change.path && (change.path.indexOf('settings.') === 0 || change.path === 'annotations.list')) {
+            if (CC._persistTimer) clearTimeout(CC._persistTimer);
+            CC._persistTimer = setTimeout(function() {
+              if (change.path.indexOf('settings.') === 0) {
+                CCPersistence.save('settings', state.get('settings'));
+              } else if (change.path === 'annotations.list') {
+                CCPersistence.save('annotations', state.get('annotations.list'));
+              }
+            }, 2000);
+          }
+        });
       });
     }
 
@@ -1027,7 +1049,11 @@
     CC.changeTracker.pushRaw({
       prop: 'delete',
       newVal: el.outerHTML.substring(0, 100),
-      oldVal: null,
+      oldVal: {
+        html: el.outerHTML,
+        parentId: el.parentElement ? el.parentElement.id : '',
+        parentPath: el.parentElement ? CC.dom.buildPath(el.parentElement) : ''
+      },
       _restoreData: {
         html: el.outerHTML,
         parent: el.parentElement ? CC.dom.buildPath(el.parentElement) : '',
@@ -1309,18 +1335,58 @@
       if (settings) CCPersistence.save('settings', settings);
     }
 
+    // Clear persist timer
+    if (CC._persistTimer) clearTimeout(CC._persistTimer);
+
     // Remove all editor DOM
     var root = document.querySelector('.cc-root');
     if (root) root.remove();
 
     // Remove handles
-    var handles = CC.state.get('handles.resize') || [];
-    handles.forEach(function(h) { h.remove(); });
-    var rh = CC.state.get('handles.rotate');
-    if (rh) rh.remove();
+    if (CC.state) {
+      var handles = CC.state.get('handles.resize') || [];
+      handles.forEach(function(h) { h.remove(); });
+      var rh = CC.state.get('handles.rotate');
+      if (rh) rh.remove();
+    }
+
+    // Teardown canvas (keydown/keyup/wheel + pan listeners)
+    if (CC.canvas) CC.canvas.destroy();
+
+    // Teardown clipboard (document keydown)
+    if (CC.clipboard) CC.clipboard.destroy();
+
+    // Teardown tabs (bus.off subscriptions)
+    var tabs = ['layersTab', 'propertiesTab', 'changesTab', 'notesAnnotationsTab',
+                'annotationsTab', 'stylesTab'];
+    tabs.forEach(function(tabName) {
+      var tab = CC._tabs && CC._tabs[tabName];
+      if (tab && typeof tab.destroy === 'function') tab.destroy();
+    });
+
+    // Remove DOM event listeners
+    if (CC._domHandlers) {
+      var canvasEl = CC.state ? CC.state.canvas : null;
+      var wrapper = CC.state ? CC.state.get('canvas.wrapper') : null;
+      var h = CC._domHandlers;
+      if (canvasEl) {
+        canvasEl.removeEventListener('mousedown', h.canvasMousedown);
+        canvasEl.removeEventListener('dblclick', h.canvasDblclick);
+        canvasEl.removeEventListener('contextmenu', h.canvasContextmenu);
+      }
+      document.removeEventListener('mousemove', h.docMousemove);
+      document.removeEventListener('mouseup', h.docMouseup);
+      document.removeEventListener('mousedown', h.docMousedown);
+      if (wrapper) {
+        wrapper.removeEventListener('wheel', h.viewportWheel);
+      }
+    }
 
     // Teardown keyboard
     if (CC.keyboard) CC.keyboard.teardown();
+
+    // Destroy event bus (last — clears all subscriptions)
+    if (CC.bus) CC.bus.destroy();
 
     // Clean state
     document.body.classList.remove('cc-active', 'cc-placing', 'cc-paused');

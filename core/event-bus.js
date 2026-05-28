@@ -41,6 +41,11 @@
     return this;
   };
 
+  EventBus.prototype.destroy = function() {
+    this._listeners = {};
+    return this;
+  };
+
   // Export
   window.CCEventBus = EventBus;
 })();

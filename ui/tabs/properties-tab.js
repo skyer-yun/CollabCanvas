@@ -106,13 +106,14 @@
     this.currentEl = null;
 
     var self = this;
-    bus.on('selection:changed', function (data) {
+    this._onSelectionChanged = function (data) {
       if (data.action === 'select') {
         self.refresh(data.element);
       } else {
         self.refresh(null);
       }
-    });
+    };
+    bus.on('selection:changed', this._onSelectionChanged);
   }
 
   PropertiesTab.prototype.render = function (container, element) {
@@ -520,6 +521,11 @@
     }));
 
     container.appendChild(groupSection('背景', bgBody, true));
+  };
+
+  PropertiesTab.prototype.destroy = function () {
+    if (!this.bus) return;
+    this.bus.off('selection:changed', this._onSelectionChanged);
   };
 
   window.CCPropertiesTab = PropertiesTab;

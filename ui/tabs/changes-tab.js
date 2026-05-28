@@ -34,7 +34,8 @@
     this.activeFilter = 'all';
 
     var self = this;
-    bus.on('history:recorded', function () { self.refresh(); });
+    this._onHistoryRecorded = function () { self.refresh(); };
+    bus.on('history:recorded', this._onHistoryRecorded);
   }
 
   ChangesTab.prototype.render = function (container) {
@@ -336,6 +337,11 @@
     textarea.select();
     document.execCommand('copy');
     document.body.removeChild(textarea);
+  };
+
+  ChangesTab.prototype.destroy = function () {
+    if (!this.bus) return;
+    this.bus.off('history:recorded', this._onHistoryRecorded);
   };
 
   window.CCChangesTab = ChangesTab;

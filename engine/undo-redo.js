@@ -73,6 +73,40 @@
       this.eventBus.emit('history:redo', entry);
     }
 
+    // ── Element Resolution ─────────────────────────────────────
+
+    /**
+     * Resolve a serialized or live element reference to a live HTMLElement.
+     * Supports: direct HTMLElement, { __ccRef, id } objects.
+     */
+    _resolveElement(ref) {
+      if (ref instanceof HTMLElement) return ref;
+      if (ref && ref.__ccRef && ref.id) {
+        var el = document.getElementById(ref.id);
+        if (!el) console.warn('[UndoRedo] element not found: #' + ref.id);
+        return el;
+      }
+      return null;
+    }
+
+    /**
+     * Resolve parent from various formats: HTMLElement, { __ccRef, id }, parentId string,
+     * or via parentPath CSS selector.
+     */
+    _resolveParent(data) {
+      // Direct HTMLElement (legacy)
+      if (data.parent instanceof HTMLElement) return data.parent;
+      // Serialized ref
+      if (data.parent && data.parent.__ccRef && data.parent.id) {
+        return document.getElementById(data.parent.id);
+      }
+      // parentId
+      if (data.parentId) return document.getElementById(data.parentId);
+      // parentPath (CSS selector)
+      if (data.parentPath) return document.querySelector(data.parentPath);
+      return null;
+    }
+
     // ── Built-in handlers ────────────────────────────────────
 
     _registerBuiltinHandlers() {
@@ -81,12 +115,12 @@
       // CSS property change
       this.registerHandler('css', {
         undo: function (entry) {
-          var el = entry.oldVal.element;
+          var el = self._resolveElement(entry.oldVal.element);
           if (!el || !el.parentNode) return;
           self._applyStyles(el, entry.oldVal);
         },
         redo: function (entry) {
-          var el = entry.newVal.element;
+          var el = self._resolveElement(entry.newVal.element);
           if (!el || !el.parentNode) return;
           self._applyStyles(el, entry.newVal);
         }
@@ -95,7 +129,7 @@
       // Resize
       this.registerHandler('resize', {
         undo: function (entry) {
-          var el = entry.oldVal.element;
+          var el = self._resolveElement(entry.oldVal.element);
           if (!el || !el.parentNode) return;
           el.style.left = entry.oldVal.left + 'px';
           el.style.top = entry.oldVal.top + 'px';
@@ -103,7 +137,7 @@
           el.style.height = entry.oldVal.height + 'px';
         },
         redo: function (entry) {
-          var el = entry.newVal.element;
+          var el = self._resolveElement(entry.newVal.element);
           if (!el || !el.parentNode) return;
           el.style.left = entry.newVal.left + 'px';
           el.style.top = entry.newVal.top + 'px';
@@ -115,12 +149,12 @@
       // Text edit
       this.registerHandler('text', {
         undo: function (entry) {
-          var el = entry.oldVal.element;
+          var el = self._resolveElement(entry.oldVal.element);
           if (!el || !el.parentNode) return;
           el.innerText = entry.oldVal.text;
         },
         redo: function (entry) {
-          var el = entry.newVal.element;
+          var el = self._resolveElement(entry.newVal.element);
           if (!el || !el.parentNode) return;
           el.innerText = entry.newVal.text;
         }
@@ -129,13 +163,13 @@
       // Move
       this.registerHandler('move', {
         undo: function (entry) {
-          var el = entry.oldVal.element;
+          var el = self._resolveElement(entry.oldVal.element);
           if (!el || !el.parentNode) return;
           el.style.left = entry.oldVal.left + 'px';
           el.style.top = entry.oldVal.top + 'px';
         },
         redo: function (entry) {
-          var el = entry.newVal.element;
+          var el = self._resolveElement(entry.newVal.element);
           if (!el || !el.parentNode) return;
           el.style.left = entry.newVal.left + 'px';
           el.style.top = entry.newVal.top + 'px';
@@ -145,12 +179,12 @@
       // Rotate
       this.registerHandler('rotate', {
         undo: function (entry) {
-          var el = entry.oldVal.element;
+          var el = self._resolveElement(entry.oldVal.element);
           if (!el || !el.parentNode) return;
           el.style.transform = 'rotate(' + entry.oldVal.rotation + 'deg)';
         },
         redo: function (entry) {
-          var el = entry.newVal.element;
+          var el = self._resolveElement(entry.newVal.element);
           if (!el || !el.parentNode) return;
           el.style.transform = 'rotate(' + entry.newVal.rotation + 'deg)';
         }
@@ -160,19 +194,43 @@
       this.registerHandler('delete', {
         undo: function (entry) {
           var old = entry.oldVal;
-          if (!old || !old.parent) return;
+          if (!old) return;
+
+          // Resolve parent from serialized formats
+          var parent = self._resolveParent(old);
+
+          // Fallback: _restoreData path (main.js format)
+          if (!parent && entry._restoreData) {
+            var rd = entry._restoreData;
+            if (rd.parentPath) parent = document.querySelector(rd.parentPath);
+            else if (rd.parentId) parent = document.getElementById(rd.parentId);
+          }
+
+          if (!parent) {
+            console.warn('[UndoRedo] delete undo: parent not found for', entry.elementId);
+            return;
+          }
+
           var wrapper = document.createElement('div');
           wrapper.innerHTML = old.html;
           var el = wrapper.firstChild;
-          if (el) old.parent.appendChild(el);
+          if (el) {
+            // Try to insert at original position
+            if (entry._restoreData && entry._restoreData.nextSibling) {
+              var nextEl = document.querySelector(entry._restoreData.nextSibling);
+              if (nextEl && nextEl.parentNode === parent) {
+                parent.insertBefore(el, nextEl);
+              } else {
+                parent.appendChild(el);
+              }
+            } else {
+              parent.appendChild(el);
+            }
+          }
         },
         redo: function (entry) {
-          var el = entry.newVal;
-          if (!el) {
-            // Try to find by elementId
-            var id = entry.elementId;
-            if (id) el = document.getElementById(id);
-          }
+          var el = null;
+          if (entry.elementId) el = document.getElementById(entry.elementId);
           if (el && el.parentNode) el.remove();
         }
       });
@@ -180,12 +238,11 @@
       // Insert
       this.registerHandler('insert', {
         undo: function (entry) {
-          var el = entry.newVal.element;
+          var el = self._resolveElement(entry.newVal.element);
           if (!el && entry.elementId) el = document.getElementById(entry.elementId);
           if (el && el.parentNode) el.remove();
         },
         redo: function (entry) {
-          var old = entry.oldVal;
           var canvas = self.state.canvas;
           if (!canvas) return;
           var wrapper = document.createElement('div');
@@ -198,7 +255,7 @@
       // Duplicate (same as insert conceptually)
       this.registerHandler('duplicate', {
         undo: function (entry) {
-          var el = entry.newVal.element;
+          var el = self._resolveElement(entry.newVal.element);
           if (!el && entry.elementId) el = document.getElementById(entry.elementId);
           if (el && el.parentNode) el.remove();
         },
@@ -216,15 +273,17 @@
       this.registerHandler('group', {
         undo: function (entry) {
           var newVal = entry.newVal;
-          var wrapper = newVal.wrapper;
+          var wrapper = self._resolveElement(newVal.wrapper);
           if (!wrapper || !wrapper.parentNode) return;
 
           // Restore children to canvas with original positions
           var canvas = self.state.canvas;
-          newVal.children.forEach(function (c) {
-            c.element.style.left = c.origLeft + 'px';
-            c.element.style.top = c.origTop + 'px';
-            canvas.appendChild(c.element);
+          (newVal.children || []).forEach(function (c) {
+            var childEl = self._resolveElement(c.element);
+            if (!childEl) return;
+            childEl.style.left = c.origLeft + 'px';
+            childEl.style.top = c.origTop + 'px';
+            canvas.appendChild(childEl);
           });
           wrapper.remove();
         },
@@ -240,8 +299,8 @@
             'position:absolute;left:' + newVal.groupLeft + 'px;top:' + newVal.groupTop + 'px;' +
             'width:' + newVal.groupWidth + 'px;height:' + newVal.groupHeight + 'px;';
 
-          oldVal.children.forEach(function (c) {
-            var el = c.element;
+          (oldVal.children || []).forEach(function (c) {
+            var el = self._resolveElement(c.element);
             if (!el || !el.parentNode) return;
             var curLeft = parseFloat(el.style.left) || 0;
             var curTop = parseFloat(el.style.top) || 0;
@@ -267,11 +326,12 @@
           wrapper.style.cssText =
             'position:absolute;left:' + oldVal.wrapperPos.left + 'px;top:' + oldVal.wrapperPos.top + 'px;';
 
-          oldVal.children.forEach(function (c) {
-            if (c.element && c.element.parentNode) {
-              c.element.style.left = c.relLeft + 'px';
-              c.element.style.top = c.relTop + 'px';
-              wrapper.appendChild(c.element);
+          (oldVal.children || []).forEach(function (c) {
+            var childEl = self._resolveElement(c.element);
+            if (childEl && childEl.parentNode) {
+              childEl.style.left = c.relLeft + 'px';
+              childEl.style.top = c.relTop + 'px';
+              wrapper.appendChild(childEl);
             }
           });
 
@@ -280,11 +340,12 @@
         redo: function (entry) {
           var newVal = entry.newVal;
           var canvas = self.state.canvas;
-          newVal.children.forEach(function (c) {
-            if (c.element && c.element.parentNode) {
-              c.element.style.left = c.canvasLeft + 'px';
-              c.element.style.top = c.canvasTop + 'px';
-              canvas.appendChild(c.element);
+          (newVal.children || []).forEach(function (c) {
+            var childEl = self._resolveElement(c.element);
+            if (childEl && childEl.parentNode) {
+              childEl.style.left = c.canvasLeft + 'px';
+              childEl.style.top = c.canvasTop + 'px';
+              canvas.appendChild(childEl);
             }
           });
           // Wrapper already removed during original ungroup
@@ -294,12 +355,12 @@
       // Z-index
       this.registerHandler('zindex', {
         undo: function (entry) {
-          var el = entry.oldVal.element;
+          var el = self._resolveElement(entry.oldVal.element);
           if (!el && entry.elementId) el = document.getElementById(entry.elementId);
           if (el) el.style.zIndex = entry.oldVal.zIndex;
         },
         redo: function (entry) {
-          var el = entry.newVal.element;
+          var el = self._resolveElement(entry.newVal.element);
           if (!el && entry.elementId) el = document.getElementById(entry.elementId);
           if (el) el.style.zIndex = entry.newVal.zIndex;
         }
@@ -308,13 +369,13 @@
       // Align
       this.registerHandler('align', {
         undo: function (entry) {
-          var el = entry.oldVal.element;
+          var el = self._resolveElement(entry.oldVal.element);
           if (!el) return;
           el.style.left = entry.oldVal.left + 'px';
           el.style.top = entry.oldVal.top + 'px';
         },
         redo: function (entry) {
-          var el = entry.newVal.element;
+          var el = self._resolveElement(entry.newVal.element);
           if (!el) return;
           el.style.left = entry.newVal.left + 'px';
           el.style.top = entry.newVal.top + 'px';

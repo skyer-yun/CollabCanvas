@@ -63,7 +63,8 @@
         self.changeTracker.record('delete', null, {
           element: el,
           html: el.outerHTML,
-          parent: el.parentNode
+          parentId: el.parentNode ? el.parentNode.id : '',
+          parentPath: el.parentNode ? CC.dom.buildPath(el.parentNode) : ''
         }, { elementId: el.id });
 
         el.remove();

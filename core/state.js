@@ -7,6 +7,8 @@
 
   function StateManager(eventBus) {
     this._bus = eventBus;
+    this._batchDepth = 0;
+    this._batchChanges = [];
     this._data = {
       mode: { current: 'edit', previous: null, paused: false },
       selection: { current: null, hover: null, multiSelect: [] },
@@ -57,17 +59,41 @@
     }
     var key = parts[parts.length - 1];
     var old = cur[key];
+
+    // Identity check — skip noop sets
+    if (old === value) return this;
+
     cur[key] = value;
 
     // Auto-emit state change event
     if (this._bus) {
-      this._bus.emit('state:changed', { path: path, oldVal: old, newVal: value });
+      var change = { path: path, oldVal: old, newVal: value };
+      if (this._batchDepth > 0) {
+        this._batchChanges.push(change);
+      } else {
+        this._bus.emit('state:changed', change);
+      }
     }
     return this;
   };
 
   StateManager.prototype.getAll = function() {
     return this._data;
+  };
+
+  StateManager.prototype.batch = function() {
+    this._batchDepth++;
+    return this;
+  };
+
+  StateManager.prototype.endBatch = function() {
+    if (this._batchDepth <= 0) return this;
+    this._batchDepth--;
+    if (this._batchDepth === 0 && this._bus && this._batchChanges.length > 0) {
+      this._bus.emit('state:changed', { batch: true, changes: this._batchChanges });
+      this._batchChanges = [];
+    }
+    return this;
   };
 
   // Shorthand accessors for frequently used paths
