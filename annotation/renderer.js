@@ -98,18 +98,22 @@
   /**
    * Add PRD visual indicators (priority dot + module badge).
    * Controlled by settings.annotations.showPRDIndicators.
+   * Only renders when annotation has explicit PRD info (non-default priority or non-empty module).
    */
   AnnotationRenderer.prototype._addPRDIndicator = function(ann, groupEl) {
     var settings = this._state.get('settings.annotations') || {};
     if (settings.showPRDIndicators === false) return;
-    if (!ann.priority && !ann.module) return;
+
+    var hasExplicitPriority = ann.priority && ann.priority !== 'medium';
+    var hasModule = ann.module && ann.module.length > 0;
+    if (!hasExplicitPriority && !hasModule) return;
 
     var bounds = this._getAnnBounds(ann);
     if (!bounds) return;
 
-    // Priority color dot (top-right)
+    // Priority color dot (top-right) — only for explicit (non-medium) priority
     var PRI_COLORS = { high: '#ff4d4f', medium: '#faad14', low: '#52c41a' };
-    if (ann.priority && PRI_COLORS[ann.priority]) {
+    if (hasExplicitPriority && PRI_COLORS[ann.priority]) {
       var dot = this._svgEl('circle', {
         cx: bounds.right + 2, cy: bounds.top - 2, r: 5,
         fill: PRI_COLORS[ann.priority], stroke: '#fff', 'stroke-width': 1.5

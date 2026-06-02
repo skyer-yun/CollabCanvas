@@ -83,7 +83,6 @@
     'tokens/importer.js',
     'ui/tabs/annotations-tab.js',
     'ui/tabs/styles-tab.js',
-    'ui/tabs/ai-tab.js',
 
     // Layer 7: Phase 3
     'version/snapshot.js',
@@ -94,6 +93,7 @@
     'loader/archive-loader.js',
     'loader/proxy.js',
     'core/ai-client.js',
+    'ui/tabs/ai-tab.js',
     'ui/tabs/pages-tab.js',
     'ui/tabs/versions-tab.js',
 

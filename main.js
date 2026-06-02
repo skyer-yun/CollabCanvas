@@ -145,7 +145,7 @@
     var proxy = null;
     var aiClient = null;
     if (typeof CCProxyHelper !== 'undefined') proxy = CC.proxy = new CCProxyHelper();
-    if (typeof CCAIClient !== 'undefined') aiClient = CC.aiClient = new AIClient(state, bus, proxy);
+    if (typeof CCAIClient !== 'undefined') aiClient = CC.aiClient = new CCAIClient(state, bus, proxy);
 
     // Token system instances (Phase 2 optional)
     var tokenExtractor = null;
@@ -855,18 +855,26 @@
     // ── Phase 2A/B/C: AI + PRD Event Handlers ──────────────
 
     // Quick PRD popup after annotation creation
+    // Only fires when user explicitly holds Alt while creating annotation,
+    // OR when a non-trivial annotation (rect/text/sticky/number) is created.
+    // Skips for brush/mosaic/measure/arrow to avoid noise.
+    var PRD_POPUP_TYPES = { rect: true, text: true, sticky: true, number: true };
     bus.on('annotation:created', function(annotation) {
+      // Pre-fill defaults only when annotation has no explicit module/priority yet
       var annSettings = state.get('settings.annotations') || {};
-      // Pre-fill defaults if available
-      if (annSettings.defaultModule || annSettings.defaultPriority || annSettings.defaultRequirementType) {
+      var needsDefaults = !annotation.module && !annotation.priority;
+      if (needsDefaults && (annSettings.defaultModule || annSettings.defaultPriority || annSettings.defaultRequirementType)) {
         var changes = {};
         if (annSettings.defaultModule) changes.module = annSettings.defaultModule;
         if (annSettings.defaultPriority) changes.priority = annSettings.defaultPriority;
         if (annSettings.defaultRequirementType) changes.requirementType = annSettings.defaultRequirementType;
         annotator.update(annotation.id, changes);
       }
-      // Show quick PRD popup
-      _showQuickPRDPopup(annotation);
+      // Show quick PRD popup only for content-bearing annotation types,
+      // and only when showPRDIndicators is enabled.
+      if (PRD_POPUP_TYPES[annotation.type] && annSettings.showPRDIndicators !== false) {
+        _showQuickPRDPopup(annotation);
+      }
     });
 
     function _showQuickPRDPopup(annotation) {

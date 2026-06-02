@@ -41,6 +41,7 @@
   // ── Draw ──────────────────────────────────────────────
 
   AITab.prototype._draw = function () {
+    var self = this;
     var c = this._container;
     if (!c) return;
     c.innerHTML = '';
