@@ -38,7 +38,8 @@
         module: ann.module || '',
         priority: ann.priority || 'medium',
         requirementType: ann.requirementType || 'functional',
-        acceptanceCriteria: ann.acceptanceCriteria || ''
+        acceptanceCriteria: ann.acceptanceCriteria || '',
+        requirementId: ann.requirementId || ''
       };
       items.push(item);
     }
@@ -197,8 +198,10 @@
       var gItems = groups[gName];
       lines.push('## ' + gName);
       lines.push('');
-      lines.push('| \u7F16\u53F7 | \u9700\u6C42\u7C7B\u578B | \u4F18\u5148\u7EA7 | \u5185\u5BB9 | \u72B6\u6001 |');
-      lines.push('|------|---------|--------|------|------|');
+      lines.push('| \u7F16\u53F7 | \u9700\u6C42\u7C7B\u578B | \u4F18\u5148\u7EA7 | \u5185\u5BB9 | \u72B6\u6000 |' +
+        (gItems.some(function(gi) { return gi.requirementId; }) ? ' \u9700\u6C42ID |' : ''));
+      lines.push('|------|---------|--------|------|------|' +
+        (gItems.some(function(gi) { return gi.requirementId; }) ? '--------|' : ''));
 
       for (var gi = 0; gi < gItems.length; gi++) {
         var d = gItems[gi];
@@ -206,7 +209,8 @@
         lines.push('| ' + numLabel + ' | ' + (reqTypeMap[d.requirementType] || d.requirementType) +
           ' | ' + (priMap[d.priority] || d.priority) +
           ' | ' + (d.text || '-') +
-          ' | ' + (statusMap[d.status] || d.status) + ' |');
+          ' | ' + (statusMap[d.status] || d.status) +
+          (d.requirementId ? ' | ' + d.requirementId : '') + ' |');
       }
       lines.push('');
 

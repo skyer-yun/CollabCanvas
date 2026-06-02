@@ -118,8 +118,10 @@
     // Phase 2 tabs (may or may not be loaded)
     var annotationsTab = null;
     var stylesTab = null;
+    var aiTab = null;
     if (typeof CCAnnotationsTab !== 'undefined') annotationsTab = new CCAnnotationsTab(state, bus);
     if (typeof CCStylesTab !== 'undefined') stylesTab = new CCStylesTab(state, bus);
+    if (typeof CCAITab !== 'undefined') aiTab = new CCAITab(state, bus);
 
     // Store tab references for cleanup
     CC._tabs = {
@@ -128,7 +130,8 @@
       changesTab: changesTab,
       notesAnnotationsTab: notesAnnotationsTab,
       annotationsTab: annotationsTab,
-      stylesTab: stylesTab
+      stylesTab: stylesTab,
+      aiTab: aiTab
     };
     var pagesTab = null;
     var versionsTab = null;
@@ -137,6 +140,12 @@
     var annotator = CC.annotator = new CCAnnotator(state, bus);
     var annotationTools = CC.annotationTools = new CCAnnotationTools(state, bus);
     var annotationRenderer = CC.annotationRenderer = new CCAnnotationRenderer(state);
+
+    // AI client (Phase 2A)
+    var proxy = null;
+    var aiClient = null;
+    if (typeof CCProxyHelper !== 'undefined') proxy = CC.proxy = new CCProxyHelper();
+    if (typeof CCAIClient !== 'undefined') aiClient = CC.aiClient = new AIClient(state, bus, proxy);
 
     // Token system instances (Phase 2 optional)
     var tokenExtractor = null;
@@ -241,6 +250,7 @@
     if (rightResult.tabBodies.notes && notesAnnotationsTab) notesAnnotationsTab.render(rightResult.tabBodies.notes);
     if (rightResult.tabBodies.styles && stylesTab) stylesTab.render(rightResult.tabBodies.styles);
     if (rightResult.tabBodies.versions && versionsTab) versionsTab.render(rightResult.tabBodies.versions);
+    if (rightResult.tabBodies.ai && aiTab) aiTab.render(rightResult.tabBodies.ai);
 
     // ==================== Wire Canvas Events ====================
 
@@ -842,6 +852,124 @@
       bus.emit('annotation:updated', {});
     });
 
+    // ── Phase 2A/B/C: AI + PRD Event Handlers ──────────────
+
+    // Quick PRD popup after annotation creation
+    bus.on('annotation:created', function(annotation) {
+      var annSettings = state.get('settings.annotations') || {};
+      // Pre-fill defaults if available
+      if (annSettings.defaultModule || annSettings.defaultPriority || annSettings.defaultRequirementType) {
+        var changes = {};
+        if (annSettings.defaultModule) changes.module = annSettings.defaultModule;
+        if (annSettings.defaultPriority) changes.priority = annSettings.defaultPriority;
+        if (annSettings.defaultRequirementType) changes.requirementType = annSettings.defaultRequirementType;
+        annotator.update(annotation.id, changes);
+      }
+      // Show quick PRD popup
+      _showQuickPRDPopup(annotation);
+    });
+
+    function _showQuickPRDPopup(annotation) {
+      var annSettings = state.get('settings.annotations') || {};
+      if (!annSettings.showPRDIndicators) return;
+
+      // Find the annotation element position
+      var zoom = state.zoom || 1;
+      var canvasRect = canvasEl.getBoundingClientRect();
+      var left = canvasRect.left + annotation.x * zoom + 20;
+      var top = canvasRect.top + annotation.y * zoom;
+
+      var popup = document.createElement('div');
+      popup.className = 'cc-quick-prd-popup';
+      popup.style.cssText = 'position:fixed;left:' + left + 'px;top:' + top + 'px;z-index:10000;' +
+        'background:#fff;border:1px solid #d9d9d9;border-radius:8px;padding:10px 12px;' +
+        'box-shadow:0 2px 8px rgba(0,0,0,0.15);font-size:12px;min-width:180px;';
+
+      var html = '<div style="margin-bottom:6px;font-weight:600;">快速 PRD 设置</div>' +
+        '<div style="margin-bottom:4px;"><label>模块：</label><input class="cc-comp-input" id="cc-qprd-module" ' +
+        'value="' + (annSettings.defaultModule || '') + '" style="width:120px;font-size:11px;padding:2px 6px;"></div>' +
+        '<div style="margin-bottom:4px;display:flex;gap:4px;">' +
+        '<span>优先级：</span>' +
+        '<button class="cc-qprd-pri" data-pri="high" style="padding:1px 8px;font-size:10px;border:1px solid #ff4d4f;border-radius:3px;background:' +
+        (annSettings.defaultPriority === 'high' ? '#ff4d4f' : '#fff') + ';color:' +
+        (annSettings.defaultPriority === 'high' ? '#fff' : '#ff4d4f') + ';">高</button>' +
+        '<button class="cc-qprd-pri" data-pri="medium" style="padding:1px 8px;font-size:10px;border:1px solid #faad14;border-radius:3px;background:' +
+        (annSettings.defaultPriority === 'medium' || !annSettings.defaultPriority ? '#faad14' : '#fff') + ';color:' +
+        (annSettings.defaultPriority === 'medium' || !annSettings.defaultPriority ? '#fff' : '#faad14') + ';">中</button>' +
+        '<button class="cc-qprd-pri" data-pri="low" style="padding:1px 8px;font-size:10px;border:1px solid #52c41a;border-radius:3px;background:' +
+        (annSettings.defaultPriority === 'low' ? '#52c41a' : '#fff') + ';color:' +
+        (annSettings.defaultPriority === 'low' ? '#fff' : '#52c41a') + ';">低</button></div>' +
+        '<div style="margin-top:6px;display:flex;gap:6px;">' +
+        '<button id="cc-qprd-ok" style="padding:2px 12px;font-size:11px;background:#1677ff;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button>' +
+        '<button id="cc-qprd-skip" style="padding:2px 12px;font-size:11px;background:#f0f0f0;border:none;border-radius:4px;cursor:pointer;">跳过</button></div>';
+      popup.innerHTML = html;
+      document.body.appendChild(popup);
+
+      var selectedPri = annSettings.defaultPriority || 'medium';
+
+      // Priority button toggle
+      popup.querySelectorAll('.cc-qprd-pri').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          selectedPri = btn.getAttribute('data-pri');
+          var colors = { high: '#ff4d4f', medium: '#faad14', low: '#52c41a' };
+          popup.querySelectorAll('.cc-qprd-pri').forEach(function(b) {
+            var p = b.getAttribute('data-pri');
+            b.style.background = p === selectedPri ? colors[p] : '#fff';
+            b.style.color = p === selectedPri ? '#fff' : colors[p];
+          });
+        });
+      });
+
+      // OK button
+      popup.querySelector('#cc-qprd-ok').addEventListener('click', function() {
+        var moduleVal = popup.querySelector('#cc-qprd-module').value;
+        annotator.update(annotation.id, {
+          module: moduleVal,
+          priority: selectedPri
+        });
+        if (popup.parentNode) popup.parentNode.removeChild(popup);
+        toast.show('PRD 信息已设置', 'success');
+      });
+
+      // Skip button
+      popup.querySelector('#cc-qprd-skip').addEventListener('click', function() {
+        if (popup.parentNode) popup.parentNode.removeChild(popup);
+      });
+
+      // Keyboard shortcuts
+      function onKey(e) {
+        if (e.key === 'Enter') {
+          popup.querySelector('#cc-qprd-ok').click();
+          document.removeEventListener('keydown', onKey);
+        } else if (e.key === 'Escape') {
+          popup.querySelector('#cc-qprd-skip').click();
+          document.removeEventListener('keydown', onKey);
+        }
+      }
+      document.addEventListener('keydown', onKey);
+
+      // Auto-remove after 15 seconds
+      setTimeout(function() {
+        if (popup.parentNode) popup.parentNode.removeChild(popup);
+        document.removeEventListener('keydown', onKey);
+      }, 15000);
+    }
+
+    // Batch update annotations
+    bus.on('annotation:batch-update', function(data) {
+      if (!data.ids || !data.changes) return;
+      var count = 0;
+      for (var i = 0; i < data.ids.length; i++) {
+        var updated = annotator.update(data.ids[i], data.changes);
+        if (updated) {
+          annotationRenderer.remove(data.ids[i]);
+          annotationRenderer.render(updated);
+          count++;
+        }
+      }
+      toast.show('已批量更新 ' + count + ' 个标注', 'success');
+    });
+
     // ==================== Styles Tab Events ====================
     // Extract tokens from page
     bus.on('token:extract-request', function() {
@@ -949,6 +1077,7 @@
       save: function() { exportEngine.saveFile(); },
       exportInstructions: function() { exportEngine.exportInstructions(); },
       exportPNG: function() { exportEngine.exportPNG(); },
+      ai: function() { return aiClient; },
       shutdown: shutdown
     };
 

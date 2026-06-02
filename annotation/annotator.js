@@ -55,6 +55,7 @@
       priority: data.priority || 'medium',
       requirementType: data.requirementType || 'functional',
       acceptanceCriteria: data.acceptanceCriteria || '',
+      requirementId: data.requirementId || '',
       timestamp: Date.now()
     };
 
@@ -92,7 +93,7 @@
     if (!annotation) return null;
 
     // Whitelist of updatable fields
-    var allowed = ['type', 'x', 'y', 'w', 'h', 'text', 'color', 'status', 'assignee', 'module', 'priority', 'requirementType', 'acceptanceCriteria'];
+    var allowed = ['type', 'x', 'y', 'w', 'h', 'text', 'color', 'status', 'assignee', 'module', 'priority', 'requirementType', 'acceptanceCriteria', 'requirementId'];
 
     // Create new array + new annotation object (immutable)
     var newList = list.slice();
@@ -164,6 +165,7 @@
       if (filter.module && ann.module !== filter.module) return false;
       if (filter.priority && ann.priority !== filter.priority) return false;
       if (filter.requirementType && ann.requirementType !== filter.requirementType) return false;
+      if (filter.requirementId && ann.requirementId !== filter.requirementId) return false;
       return true;
     });
   };

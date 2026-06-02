@@ -9,6 +9,10 @@
     "scripting",
     "storage"
   ],
+  "host_permissions": [
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*"
+  ],
   "background": {
     "service_worker": "background/service-worker.js"
   },

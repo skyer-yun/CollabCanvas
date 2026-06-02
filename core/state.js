@@ -26,9 +26,9 @@
       annotations: { list: [], currentTool: null },
       settings: {
         project: { name: '', version: '1.0', author: '', description: '', pageUrl: '' },
-        ai: { provider: 'none', apiKey: '', endpoint: '', model: '' },
+        ai: { provider: 'none', apiKey: '', endpoint: '', model: '', conversationHistory: [], lastError: null },
         export: { format: 'markdown', includeScreenshots: true, includeAnnotations: true, annotationNumberFormat: 'auto' },
-        annotations: { autoNumber: true, defaultColor: '#1677ff', defaultStatus: 'pending', showCoordinates: true }
+        annotations: { autoNumber: true, defaultColor: '#1677ff', defaultStatus: 'pending', showCoordinates: true, showPRDIndicators: true, defaultModule: '', defaultPriority: 'medium', defaultRequirementType: 'functional' }
       },
       nudgeTimer: null,
       nudgeStartPositions: {},

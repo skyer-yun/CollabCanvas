@@ -37,27 +37,25 @@
    */
   ProxyHelper.prototype._fetchViaExtension = function (url, options) {
     return new Promise(function (resolve, reject) {
+      var opts = {
+        method: (options && options.method) || 'GET',
+        headers: (options && options.headers) || {}
+      };
+      if (options && options.body) opts.body = options.body;
+
       chrome.runtime.sendMessage(
-        {
-          type: 'PROXY_FETCH',
-          url: url,
-          options: {
-            method: (options && options.method) || 'GET',
-            headers: (options && options.headers) || {}
-          }
-        },
+        { type: 'proxy-fetch', url: url, options: opts },
         function (response) {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
             return;
           }
-          if (!response || !response.ok) {
-            reject(new Error('Proxy fetch failed: ' + (response && response.statusText)));
+          if (!response || !response.success) {
+            reject(new Error('Proxy fetch failed: ' + (response && response.error || 'unknown error')));
             return;
           }
-          resolve(new Response(response.body, {
-            status: response.status,
-            statusText: response.statusText,
+          resolve(new Response(response.data, {
+            status: response.status || 200,
             headers: new Headers(response.headers || {})
           }));
         }

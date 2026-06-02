@@ -20,6 +20,9 @@
     this._filter = 'all';
     this._displayMode = 'full';
     this._eventsBound = false;
+    this._filterModule = 'all';
+    this._filterPriority = 'all';
+    this._filterReqType = 'all';
     this._onAnnotationCreated = this._onAnnotationChanged.bind(this);
     this._onAnnotationUpdated = this._onAnnotationChanged.bind(this);
     this._onAnnotationRemoved = this._onAnnotationChanged.bind(this);
@@ -116,6 +119,55 @@
       filterBar.appendChild(btn);
     });
     container.appendChild(filterBar);
+
+    // PRD dimension filters (module / priority / requirementType)
+    var prdBar = document.createElement('div');
+    prdBar.className = 'cc-na-filters cc-na-prd-filters';
+
+    // Module filter (dynamic from annotations)
+    var allAnns = this._state.get('annotations.list') || [];
+    var modules = {};
+    for (var mi = 0; mi < allAnns.length; mi++) {
+      if (allAnns[mi].module) modules[allAnns[mi].module] = true;
+    }
+    var moduleSel = document.createElement('select');
+    moduleSel.className = 'cc-na-filter-sel';
+    moduleSel.innerHTML = '<option value="all">全部模块</option>';
+    Object.keys(modules).forEach(function(m) {
+      var o = document.createElement('option');
+      o.value = m; o.textContent = m;
+      if (self._filterModule === m) o.selected = true;
+      moduleSel.appendChild(o);
+    });
+    moduleSel.addEventListener('change', function() {
+      self._filterModule = moduleSel.value;
+      self._draw(container);
+    });
+    prdBar.appendChild(moduleSel);
+
+    // Priority filter
+    var priSel = document.createElement('select');
+    priSel.className = 'cc-na-filter-sel';
+    priSel.innerHTML = '<option value="all">全部优先级</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option>';
+    priSel.value = this._filterPriority;
+    priSel.addEventListener('change', function() {
+      self._filterPriority = priSel.value;
+      self._draw(container);
+    });
+    prdBar.appendChild(priSel);
+
+    // Requirement type filter
+    var reqSel = document.createElement('select');
+    reqSel.className = 'cc-na-filter-sel';
+    reqSel.innerHTML = '<option value="all">全部类型</option><option value="functional">功能</option><option value="performance">性能</option><option value="security">安全</option><option value="ux">体验</option>';
+    reqSel.value = this._filterReqType;
+    reqSel.addEventListener('change', function() {
+      self._filterReqType = reqSel.value;
+      self._draw(container);
+    });
+    prdBar.appendChild(reqSel);
+
+    container.appendChild(prdBar);
   };
 
   // ---- List ----
@@ -218,6 +270,16 @@
       priTag.style.background = PRI_COLORS[ann.priority] + '20';
       priTag.style.color = PRI_COLORS[ann.priority];
       meta.appendChild(priTag);
+    }
+    // PRD fields: requirementType tag
+    var REQ_LABELS = { functional: '功能', performance: '性能', security: '安全', ux: '体验' };
+    if (ann.requirementType && REQ_LABELS[ann.requirementType]) {
+      var reqTag = document.createElement('span');
+      reqTag.className = 'cc-na-tag';
+      reqTag.style.background = '#1677ff20';
+      reqTag.style.color = '#1677ff';
+      reqTag.textContent = REQ_LABELS[ann.requirementType];
+      meta.appendChild(reqTag);
     }
     // Coordinates (respects showCoordinates setting)
     if (annSettings.showCoordinates !== false) {
@@ -367,7 +429,16 @@
       '<div style="display:flex;gap:6px;margin-top:4px;">' +
       '<button class="cc-na-export-copy" onclick="navigator.clipboard.writeText(document.getElementById(\'cc-export-prd\').value);this.textContent=\'\u5DF2\u590D\u5236\';">\u590D\u5236 PRD</button>' +
       '<button class="cc-na-export-copy" id="cc-prd-download-btn" style="background:#52c41a;">\u4E0B\u8F7D .md</button>' +
-      '</div></div></div>';
+      '<button class="cc-na-export-copy" id="cc-prd-ai-enhance-btn" style="background:#722ed1;color:#fff;">AI \u4F18\u5316 PRD</button>' +
+      '</div>' +
+      '<div id="cc-prd-ai-result" style="display:none;margin-top:8px;">' +
+      '<label style="font-size:11px;color:#666;">AI \u589E\u5F3A\u7248\u672C:</label>' +
+      '<textarea class="cc-comp-input cc-comp-textarea" id="cc-export-prd-enhanced" rows="14" readonly style="font-size:11px;font-family:Consolas,monospace;margin-top:4px;"></textarea>' +
+      '<div style="display:flex;gap:6px;margin-top:4px;">' +
+      '<button class="cc-na-export-copy" id="cc-prd-use-enhanced">\u4F7F\u7528\u589E\u5F3A\u7248\u672C</button>' +
+      '<button class="cc-na-export-copy" id="cc-prd-keep-original">\u4FDD\u7559\u539F\u59CB</button>' +
+      '</div></div>' +
+      '</div></div>';
 
     var modal = window.CCModal;
     if (!modal) return;
@@ -411,14 +482,76 @@
           setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
         });
       }
+
+      // AI enhance PRD button
+      var aiEnhanceBtn = dialog.querySelector('#cc-prd-ai-enhance-btn');
+      if (aiEnhanceBtn) {
+        aiEnhanceBtn.addEventListener('click', function () {
+          var aiClient = window.__CC && window.__CC.aiClient;
+          if (!aiClient || !aiClient.isConfigured()) {
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('请先在设置中配置 AI', 'info');
+            return;
+          }
+          aiEnhanceBtn.disabled = true;
+          aiEnhanceBtn.textContent = 'AI 分析中...';
+          var prdText = document.getElementById('cc-export-prd');
+          if (!prdText) return;
+          var origPRD = prdText.value;
+
+          var systemPrompt = '你是一个资深产品经理。请优化此 PRD 文档：改进描述清晰度、检查一致性、识别缺失需求、建议优先级调整。输出完整的优化后 Markdown 文档。';
+          aiClient.prompt(systemPrompt, origPRD, { maxTokens: 4096 }).then(function(result) {
+            aiEnhanceBtn.disabled = false;
+            aiEnhanceBtn.textContent = 'AI 优化 PRD';
+            var resultDiv = document.getElementById('cc-prd-ai-result');
+            var resultTa = document.getElementById('cc-export-prd-enhanced');
+            if (resultDiv && resultTa) {
+              resultTa.value = result.content;
+              resultDiv.style.display = 'block';
+            }
+          }).catch(function(err) {
+            aiEnhanceBtn.disabled = false;
+            aiEnhanceBtn.textContent = 'AI 优化 PRD';
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('AI 错误: ' + err.message, 'info');
+          });
+        });
+      }
+
+      // Use enhanced / keep original buttons
+      var useEnhBtn = dialog.querySelector('#cc-prd-use-enhanced');
+      if (useEnhBtn) {
+        useEnhBtn.addEventListener('click', function () {
+          var origTa = document.getElementById('cc-export-prd');
+          var enhTa = document.getElementById('cc-export-prd-enhanced');
+          if (origTa && enhTa) origTa.value = enhTa.value;
+          var resultDiv = document.getElementById('cc-prd-ai-result');
+          if (resultDiv) resultDiv.style.display = 'none';
+          if (window.__CC && window.__CC.toast) window.__CC.toast.show('已使用 AI 增强版本', 'success');
+        });
+      }
+      var keepBtn = dialog.querySelector('#cc-prd-keep-original');
+      if (keepBtn) {
+        keepBtn.addEventListener('click', function () {
+          var resultDiv = document.getElementById('cc-prd-ai-result');
+          if (resultDiv) resultDiv.style.display = 'none';
+        });
+      }
     }, 50);
   };
 
   // ---- Filter ----
 
   NotesAnnotationsTab.prototype._applyFilter = function (list) {
-    if (this._filter === 'all') return list;
-    return list.filter(function (a) { return a.status === this._filter; }.bind(this));
+    var filter = this._filter;
+    var filterModule = this._filterModule;
+    var filterPriority = this._filterPriority;
+    var filterReqType = this._filterReqType;
+    return list.filter(function (a) {
+      if (filter !== 'all' && a.status !== filter) return false;
+      if (filterModule !== 'all' && a.module !== filterModule) return false;
+      if (filterPriority !== 'all' && a.priority !== filterPriority) return false;
+      if (filterReqType !== 'all' && a.requirementType !== filterReqType) return false;
+      return true;
+    });
   };
 
   /**

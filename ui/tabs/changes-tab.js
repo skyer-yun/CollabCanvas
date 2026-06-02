@@ -123,6 +123,35 @@
     });
     toolbar.appendChild(copyBtn);
 
+    // AI Generate Code button
+    var aiClient = window.__CC && window.__CC.aiClient;
+    var aiBtn = document.createElement('button');
+    aiBtn.className = 'cc-changes-ai';
+    aiBtn.textContent = 'AI 生成代码';
+    aiBtn.disabled = changes.length === 0 || !aiClient || !aiClient.isConfigured();
+    if (!aiClient || !aiClient.isConfigured()) {
+      aiBtn.title = '请先在设置中配置 AI';
+    }
+    aiBtn.addEventListener('click', function () {
+      if (changes.length === 0 || !aiClient || !aiClient.isConfigured()) return;
+      aiBtn.disabled = true;
+      aiBtn.textContent = '生成中...';
+
+      var prompt = self._generatePrompt(changes);
+      var systemPrompt = '你是一个前端开发专家。根据用户的变更记录，生成对应的CSS/HTML修改代码。' +
+        '请输出纯代码块，每条变更给出：选择器、属性、新值。不要输出多余解释。';
+      aiClient.prompt(systemPrompt, prompt).then(function(result) {
+        aiBtn.disabled = false;
+        aiBtn.textContent = 'AI 生成代码';
+        self._showAICodeResult(result.content, changes);
+      }).catch(function(err) {
+        aiBtn.disabled = false;
+        aiBtn.textContent = 'AI 生成代码';
+        if (window.__CC && window.__CC.toast) window.__CC.toast.show('AI 错误: ' + err.message, 'info');
+      });
+    });
+    toolbar.appendChild(aiBtn);
+
     container.appendChild(toolbar);
 
     // List container
@@ -337,6 +366,55 @@
     textarea.select();
     document.execCommand('copy');
     document.body.removeChild(textarea);
+  };
+
+  ChangesTab.prototype._showAICodeResult = function (code, changes) {
+    var modal = window.CCModal;
+    if (!modal) return;
+
+    var html = '<div class="cc-comp-form">' +
+      '<textarea class="cc-comp-input cc-comp-textarea" id="cc-ai-code-result" rows="16" style="font-size:11px;font-family:Consolas,monospace;">' +
+      code.replace(/</g, '&lt;') + '</textarea>' +
+      '<div style="display:flex;gap:6px;margin-top:6px;">' +
+      '<button class="cc-na-export-copy" id="cc-ai-code-copy">复制代码</button>' +
+      '<button class="cc-btn" id="cc-ai-code-apply" style="background:#1677ff;color:#fff;">应用 CSS</button>' +
+      '</div></div>';
+
+    modal.show('AI 生成代码', html, [
+      { text: '关闭', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } }
+    ]);
+
+    setTimeout(function () {
+      var dialog = document.querySelector('.cc-overlay:last-of-type');
+      if (!dialog) return;
+
+      var copyBtn = dialog.querySelector('#cc-ai-code-copy');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function () {
+          var ta = dialog.querySelector('#cc-ai-code-result');
+          if (ta && navigator.clipboard) navigator.clipboard.writeText(ta.value);
+          copyBtn.textContent = '已复制!';
+        });
+      }
+
+      var applyBtn = dialog.querySelector('#cc-ai-code-apply');
+      if (applyBtn) {
+        applyBtn.addEventListener('click', function () {
+          var ta = dialog.querySelector('#cc-ai-code-result');
+          if (!ta) return;
+          var cssText = ta.value;
+          // Try to extract CSS rules and apply them
+          var selectedEl = window.__CC && window.__CC.state && window.__CC.state.selected;
+          if (selectedEl && cssText) {
+            var style = selectedEl.getAttribute('style') || '';
+            selectedEl.setAttribute('style', style + ';' + cssText);
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('CSS 已应用到选中元素', 'success');
+          } else {
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('请先选中一个元素再应用', 'info');
+          }
+        });
+      }
+    }, 50);
   };
 
   ChangesTab.prototype.destroy = function () {

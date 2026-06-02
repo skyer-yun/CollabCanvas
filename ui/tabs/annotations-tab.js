@@ -35,6 +35,7 @@
     this._filter = 'all';
     this._activeTool = null;
     this._eventsBound = false;
+    this._selectedIds = [];
     this._onAnnotationCreated = this._onAnnotationCreated.bind(this);
     this._onAnnotationUpdated = this._onAnnotationUpdated.bind(this);
     this._onAnnotationRemoved = this._onAnnotationRemoved.bind(this);
@@ -329,9 +330,14 @@
 
     item.appendChild(actions);
 
-    // Click item to locate
-    item.addEventListener('click', function() {
-      if (self._bus) self._bus.emit('annotation:select', { id: ann.id });
+    // Click item to locate (Ctrl+Click for multi-select)
+    item.addEventListener('click', function(e) {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        self._toggleSelect(ann.id, e);
+      } else {
+        if (self._bus) self._bus.emit('annotation:select', { id: ann.id });
+      }
     });
 
     return item;
@@ -396,6 +402,8 @@
       '</select></div>' +
       '<div class="cc-comp-row"><label>\u9A8C\u6536\u6807\u51C6</label>' +
       '<textarea class="cc-comp-input cc-comp-textarea" data-field="acceptanceCriteria" rows="2" placeholder="\u8F93\u5165\u9A8C\u6536\u6807\u51C6">' + (ann.acceptanceCriteria || '') + '</textarea></div>' +
+      '<div class="cc-comp-row"><label>\u9700\u6C42ID</label>' +
+      '<input class="cc-comp-input" data-field="requirementId" value="' + (ann.requirementId || '') + '" placeholder="\u5173\u8054\u5916\u90E8\u9700\u6C42ID\uFF0C\u5982 JIRA-123"></div>' +
       '</div>';
 
     var modal = window.CCModal;
@@ -412,6 +420,7 @@
         var priorityInp = d.querySelector('[data-field="priority"]');
         var reqTypeInp = d.querySelector('[data-field="requirementType"]');
         var criteriaInp = d.querySelector('[data-field="acceptanceCriteria"]');
+        var reqIdInp = d.querySelector('[data-field="requirementId"]');
 
         var changes = {};
         if (textInp) changes.text = textInp.value;
@@ -422,6 +431,7 @@
         if (priorityInp) changes.priority = priorityInp.value;
         if (reqTypeInp) changes.requirementType = reqTypeInp.value;
         if (criteriaInp) changes.acceptanceCriteria = criteriaInp.value;
+        if (reqIdInp) changes.requirementId = reqIdInp.value;
 
         if (self._bus) self._bus.emit('annotation:edit', { id: ann.id, changes: changes });
         if (d && d.parentElement) d.parentElement.remove();
@@ -441,7 +451,159 @@
           if (/^#[0-9a-fA-F]{6}$/.test(ti.value)) ci.value = ti.value;
         });
       }
+
+      // AI suggest button (if AI is configured)
+      var aiClient = window.__CC && window.__CC.aiClient;
+      if (aiClient && aiClient.isConfigured()) {
+        var aiBtn = document.createElement('button');
+        aiBtn.className = 'cc-btn';
+        aiBtn.style.cssText = 'font-size:11px;padding:4px 12px;margin-top:8px;';
+        aiBtn.textContent = 'AI 建议';
+        aiBtn.title = '让 AI 建议模块、优先级等字段';
+        aiBtn.addEventListener('click', function() {
+          aiBtn.disabled = true;
+          aiBtn.textContent = '分析中...';
+          var promptText = '基于以下标注信息，建议合适的模块(module)、优先级(priority)、需求类型(requirementType)和验收标准(acceptanceCriteria)。\n\n' +
+            '标注类型: ' + ann.type + '\n' +
+            '标注内容: ' + (ann.text || '(空)') + '\n\n' +
+            '请严格按以下JSON格式输出，不要输出其他内容：\n' +
+            '{"module":"模块名","priority":"high/medium/low","requirementType":"functional/performance/security/ux","acceptanceCriteria":"验收标准"}';
+
+          aiClient.prompt(null, promptText, { maxTokens: 256 }).then(function(result) {
+            aiBtn.disabled = false;
+            aiBtn.textContent = 'AI 建议';
+            try {
+              var jsonStr = result.content;
+              var jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                var suggestions = JSON.parse(jsonMatch[0]);
+                self._applyAISuggestion(ann.id, suggestions, dialog);
+                if (self._bus) self._bus.emit('ai:suggest-result', { id: ann.id, suggestions: suggestions });
+              }
+            } catch(e) {
+              if (window.__CC && window.__CC.toast) window.__CC.toast.show('AI 返回格式异常', 'info');
+            }
+          }).catch(function(err) {
+            aiBtn.disabled = false;
+            aiBtn.textContent = 'AI 建议';
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('AI 错误: ' + err.message, 'info');
+          });
+        });
+        var formEl = dialog.querySelector('.cc-comp-form');
+        if (formEl) formEl.appendChild(aiBtn);
+      }
     }, 50);
+  };
+
+  AnnotationsTab.prototype._applyAISuggestion = function(annId, suggestions, dialog) {
+    if (suggestions.module && dialog) {
+      var mInp = dialog.querySelector('[data-field="module"]');
+      if (mInp) mInp.value = suggestions.module;
+    }
+    if (suggestions.priority && dialog) {
+      var pInp = dialog.querySelector('[data-field="priority"]');
+      if (pInp) pInp.value = suggestions.priority;
+    }
+    if (suggestions.requirementType && dialog) {
+      var rInp = dialog.querySelector('[data-field="requirementType"]');
+      if (rInp) rInp.value = suggestions.requirementType;
+    }
+    if (suggestions.acceptanceCriteria && dialog) {
+      var aInp = dialog.querySelector('[data-field="acceptanceCriteria"]');
+      if (aInp) aInp.value = suggestions.acceptanceCriteria;
+    }
+    if (window.__CC && window.__CC.toast) window.__CC.toast.show('AI 建议已填充，点击确认保存', 'success');
+  };
+
+  // ── Batch edit support ──────────────────────────────────
+
+  AnnotationsTab.prototype._toggleSelect = function(annId, e) {
+    var idx = this._selectedIds.indexOf(annId);
+    if (idx >= 0) {
+      this._selectedIds.splice(idx, 1);
+    } else {
+      this._selectedIds.push(annId);
+    }
+    // Update visual
+    var items = this._container.querySelectorAll('.cc-ann-item');
+    for (var i = 0; i < items.length; i++) {
+      var id = items[i].getAttribute('data-ann-id');
+      if (this._selectedIds.indexOf(id) >= 0) {
+        items[i].classList.add('cc-ann-selected');
+      } else {
+        items[i].classList.remove('cc-ann-selected');
+      }
+    }
+    this._updateBatchBar();
+  };
+
+  AnnotationsTab.prototype._updateBatchBar = function() {
+    var existing = this._container.querySelector('.cc-ann-batch-bar');
+    if (existing) existing.remove();
+
+    if (this._selectedIds.length < 2) return;
+
+    var self = this;
+    var bar = document.createElement('div');
+    bar.className = 'cc-ann-batch-bar';
+
+    var info = document.createElement('span');
+    info.textContent = '已选择 ' + this._selectedIds.length + ' 个标注';
+    bar.appendChild(info);
+
+    var moduleInp = document.createElement('select');
+    moduleInp.className = 'cc-comp-input';
+    moduleInp.style.cssText = 'font-size:11px;padding:2px 6px;width:auto;';
+    moduleInp.innerHTML = '<option value="">设置模块...</option>';
+    // Collect unique modules
+    var list = this._state.get('annotations.list') || [];
+    var modules = {};
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].module) modules[list[i].module] = true;
+    }
+    Object.keys(modules).forEach(function(m) {
+      var o = document.createElement('option');
+      o.value = m; o.textContent = m;
+      moduleInp.appendChild(o);
+    });
+    bar.appendChild(moduleInp);
+
+    var priInp = document.createElement('select');
+    priInp.className = 'cc-comp-input';
+    priInp.style.cssText = 'font-size:11px;padding:2px 6px;width:auto;';
+    priInp.innerHTML = '<option value="">设置优先级...</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option>';
+    bar.appendChild(priInp);
+
+    var applyBtn = document.createElement('button');
+    applyBtn.className = 'cc-btn';
+    applyBtn.style.cssText = 'font-size:11px;padding:2px 12px;';
+    applyBtn.textContent = '应用';
+    applyBtn.addEventListener('click', function() {
+      var changes = {};
+      if (moduleInp.value) changes.module = moduleInp.value;
+      if (priInp.value) changes.priority = priInp.value;
+      if (Object.keys(changes).length === 0) return;
+      if (self._bus) self._bus.emit('annotation:batch-update', { ids: self._selectedIds.slice(), changes: changes });
+      self._selectedIds = [];
+      self._draw();
+    });
+    bar.appendChild(applyBtn);
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cc-btn';
+    cancelBtn.style.cssText = 'font-size:11px;padding:2px 12px;margin-left:4px;';
+    cancelBtn.textContent = '取消';
+    cancelBtn.addEventListener('click', function() {
+      self._selectedIds = [];
+      self._draw();
+    });
+    bar.appendChild(cancelBtn);
+
+    // Insert before list
+    var listEl = this._container.querySelector('#cc-ann-list');
+    if (listEl) {
+      this._container.insertBefore(bar, listEl);
+    }
   };
 
   AnnotationsTab.prototype.destroy = function() {

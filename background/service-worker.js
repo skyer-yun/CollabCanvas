@@ -40,8 +40,13 @@ chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
   // 代理 fetch（用于跨域请求）
   if (msg.type === 'proxy-fetch') {
     fetch(msg.url, msg.options || {})
-      .then(function(r) { return r.text(); })
-      .then(function(text) { sendResponse({ success: true, data: text }); })
+      .then(function(r) {
+        var hdrs = {};
+        r.headers.forEach(function(v, k) { hdrs[k] = v; });
+        return r.text().then(function(text) {
+          sendResponse({ success: true, data: text, status: r.status, headers: hdrs });
+        });
+      })
       .catch(function(err) { sendResponse({ success: false, error: err.message }); });
     return true;
   }

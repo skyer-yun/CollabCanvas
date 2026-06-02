@@ -105,6 +105,20 @@
         '</select>') +
       this._row('自动编号', '<input type="checkbox" class="cc-comp-checkbox" data-setting="annotations.autoNumber"' + (a.autoNumber !== false ? ' checked' : '') + '>') +
       this._row('显示坐标', '<input type="checkbox" class="cc-comp-checkbox" data-setting="annotations.showCoordinates"' + (a.showCoordinates !== false ? ' checked' : '') + '>') +
+      this._row('显示PRD指示器', '<input type="checkbox" class="cc-comp-checkbox" data-setting="annotations.showPRDIndicators"' + (a.showPRDIndicators !== false ? ' checked' : '') + '>') +
+      '<div style="border-top:1px solid #eee;margin:8px 0;"></div>' +
+      this._row('默认模块', '<input class="cc-comp-input" data-setting="annotations.defaultModule" value="' + this._esc(a.defaultModule || '') + '" placeholder="如: 登录模块">') +
+      this._row('默认优先级', '<select class="cc-comp-input" data-setting="annotations.defaultPriority">' +
+        '<option value="high"' + (a.defaultPriority === 'high' ? ' selected' : '') + '>高</option>' +
+        '<option value="medium"' + (a.defaultPriority === 'medium' ? ' selected' : '') + '>中</option>' +
+        '<option value="low"' + (a.defaultPriority === 'low' ? ' selected' : '') + '>低</option>' +
+        '</select>') +
+      this._row('默认需求类型', '<select class="cc-comp-input" data-setting="annotations.defaultRequirementType">' +
+        '<option value="functional"' + (a.defaultRequirementType === 'functional' ? ' selected' : '') + '>功能</option>' +
+        '<option value="performance"' + (a.defaultRequirementType === 'performance' ? ' selected' : '') + '>性能</option>' +
+        '<option value="security"' + (a.defaultRequirementType === 'security' ? ' selected' : '') + '>安全</option>' +
+        '<option value="ux"' + (a.defaultRequirementType === 'ux' ? ' selected' : '') + '>体验</option>' +
+        '</select>') +
       '</div></div>';
   };
 
@@ -124,7 +138,7 @@
       project: { name: '', version: '1.0', author: '', description: '', pageUrl: '' },
       ai: { provider: 'none', apiKey: '', endpoint: '', model: '' },
       export: { format: 'markdown', includeScreenshots: true, includeAnnotations: true, annotationNumberFormat: 'auto' },
-      annotations: { autoNumber: true, defaultColor: '#1677ff', defaultStatus: 'pending', showCoordinates: true }
+      annotations: { autoNumber: true, defaultColor: '#1677ff', defaultStatus: 'pending', showCoordinates: true, showPRDIndicators: true, defaultModule: '', defaultPriority: 'medium', defaultRequirementType: 'functional' }
     };
   };
 
@@ -227,7 +241,16 @@
           body = JSON.stringify({ model: ai.model || 'gpt-4o-mini', max_tokens: 10, messages: [{ role: 'user', content: 'Hi' }] });
         }
 
-        fetch(url, { method: 'POST', headers: headers, body: body })
+        // Use proxy in extension mode, direct fetch in standalone
+        var fetcher;
+        if (typeof CCProxyHelper !== 'undefined') {
+          var proxyInst = new CCProxyHelper();
+          fetcher = (proxyInst.isExtension()) ? proxyInst : { fetch: fetch };
+        } else {
+          fetcher = { fetch: fetch };
+        }
+
+        fetcher.fetch(url, { method: 'POST', headers: headers, body: body })
           .then(function (res) {
             testBtn.disabled = false;
             testBtn.textContent = '测试连接';

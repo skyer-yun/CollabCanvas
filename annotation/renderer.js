@@ -87,11 +87,61 @@
 
     if (el) {
       el.setAttribute('data-ann-id', ann.id);
+      this._addPRDIndicator(ann, el);
       this._overlay.appendChild(el);
       this._elements[ann.id] = el;
     }
 
     return el;
+  };
+
+  /**
+   * Add PRD visual indicators (priority dot + module badge).
+   * Controlled by settings.annotations.showPRDIndicators.
+   */
+  AnnotationRenderer.prototype._addPRDIndicator = function(ann, groupEl) {
+    var settings = this._state.get('settings.annotations') || {};
+    if (settings.showPRDIndicators === false) return;
+    if (!ann.priority && !ann.module) return;
+
+    var bounds = this._getAnnBounds(ann);
+    if (!bounds) return;
+
+    // Priority color dot (top-right)
+    var PRI_COLORS = { high: '#ff4d4f', medium: '#faad14', low: '#52c41a' };
+    if (ann.priority && PRI_COLORS[ann.priority]) {
+      var dot = this._svgEl('circle', {
+        cx: bounds.right + 2, cy: bounds.top - 2, r: 5,
+        fill: PRI_COLORS[ann.priority], stroke: '#fff', 'stroke-width': 1.5
+      });
+      groupEl.appendChild(dot);
+    }
+
+    // Module badge (top-left)
+    if (ann.module) {
+      var text = ann.module.length > 8 ? ann.module.substring(0, 8) + '..' : ann.module;
+      var bg = this._svgEl('rect', {
+        x: bounds.left, y: bounds.top - 16, width: text.length * 8 + 8, height: 14,
+        fill: '#f0f0f0', stroke: '#d9d9d9', 'stroke-width': 0.5, rx: 3
+      });
+      groupEl.appendChild(bg);
+      var label = this._svgEl('text', {
+        x: bounds.left + 4, y: bounds.top - 5, 'font-size': 10,
+        fill: '#666', 'font-weight': '400'
+      });
+      label.textContent = text;
+      groupEl.appendChild(label);
+    }
+  };
+
+  AnnotationRenderer.prototype._getAnnBounds = function(ann) {
+    if (ann.type === 'number') return { left: ann.x - 16, top: ann.y - 16, right: ann.x + 16, bottom: ann.y + 16 };
+    if (ann.w && ann.h) return { left: ann.x, top: ann.y, right: ann.x + ann.w, bottom: ann.y + ann.h };
+    if (ann.type === 'arrow' || ann.type === 'measure') {
+      var x1 = ann.x, y1 = ann.y, x2 = ann.x + (ann.w || 0), y2 = ann.y + (ann.h || 0);
+      return { left: Math.min(x1, x2), top: Math.min(y1, y2), right: Math.max(x1, x2), bottom: Math.max(y1, y2) };
+    }
+    return { left: ann.x, top: ann.y, right: ann.x + 100, bottom: ann.y + 20 };
   };
 
   AnnotationRenderer.prototype._svgEl = function(tag, attrs) {

@@ -1,6 +1,6 @@
 ;(function () {
-  var TABS = ['properties', 'changes', 'notes', 'styles', 'versions'];
-  var LABELS = { properties: '属性', changes: '变更', notes: '备注标注', styles: '样式', versions: '版本' };
+  var TABS = ['properties', 'changes', 'notes', 'styles', 'versions', 'ai'];
+  var LABELS = { properties: '属性', changes: '变更', notes: '备注标注', styles: '样式', versions: '版本', ai: 'AI' };
 
   function RightPanel(state, bus) {
     this.state = state;
