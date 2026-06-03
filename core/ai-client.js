@@ -243,5 +243,12 @@
     return this.chat(msgs, opts);
   };
 
+  // ── Abort ─────────────────────────────────────────────
+
+  AIClient.prototype.abortCurrent = function() {
+    // Placeholder for AbortController integration
+    // Will cancel in-flight fetch request
+  };
+
   global.CCAIClient = AIClient;
 })(window);

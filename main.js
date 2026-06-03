@@ -165,52 +165,315 @@
       versionDiffer = CC.versionDiffer = new CCVersionDiffer();
     }
 
-    // Pages/versions app facade (minimal impl for tab compatibility)
+    // ── Page helper functions ──────────────────────────────────────
+    function _uid() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 6); }
+
+    function _captureThumb(el) {
+      try {
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60">' +
+          '<foreignObject width="100%" height="100%">' +
+          '<div xmlns="http://www.w3.org/1999/xhtml" style="width:80px;height:60px;overflow:hidden;transform:scale(0.15);transform-origin:top left;">' +
+          el.innerHTML.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+          '</div></foreignObject></svg>';
+        return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+      } catch (e) { return ''; }
+    }
+
+    function _findNode(id) {
+      var pages = state.get('pages.list') || [];
+      for (var i = 0; i < pages.length; i++) {
+        if (pages[i].id === id) return pages[i];
+      }
+      return null;
+    }
+
+    function _getChildIds(parentId) {
+      var pages = state.get('pages.list') || [];
+      var ids = [];
+      for (var i = 0; i < pages.length; i++) {
+        if (pages[i].parentId === parentId) ids.push(pages[i].id);
+      }
+      return ids;
+    }
+
+    function _saveCurrentToPage() {
+      if (!appFacade.currentPage) return;
+      var node = _findNode(appFacade.currentPage);
+      if (!node || node.type === 'folder') return;
+      node.html = canvasEl.innerHTML;
+      node.thumbnail = _captureThumb(canvasEl);
+      node.updatedAt = Date.now();
+      // Slice to create new array reference, bypassing state.set identity check
+      var pages = (state.get('pages.list') || []).slice();
+      state.set('pages.list', pages);
+      appFacade.pages = pages;
+    }
+
+    function _loadPageToCanvas(page) {
+      canvasEl.innerHTML = '';
+      if (page.html) canvasEl.innerHTML = page.html;
+      if (selection) selection.clear();
+      if (undoRedo) undoRedo.reset();
+      // Don't re-run extractor on loaded pages — the HTML is already processed
+      bus.emit('canvas:reset-transform');
+    }
+
+    /**
+     * Extract design features from HTML for AI context (Axhub "theme-as-data" pattern)
+     * Scans inline styles to find most-used colors, font sizes, families, and spacing.
+     */
+    function _extractDesignProfile(html) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      var colors = {}, sizes = {}, families = {}, spacing = {};
+      var els = tmp.querySelectorAll('[style]');
+      var limit = Math.min(els.length, 500);
+      for (var i = 0; i < limit; i++) {
+        var s = els[i].style;
+        ['color', 'backgroundColor', 'borderColor', 'borderTopColor', 'borderBottomColor'].forEach(function(prop) {
+          var v = s[prop];
+          if (v && v !== '' && v !== 'transparent' && v !== 'inherit' && v !== 'none' && v !== 'initial') {
+            colors[v] = (colors[v] || 0) + 1;
+          }
+        });
+        if (s.fontSize) { sizes[s.fontSize] = (sizes[s.fontSize] || 0) + 1; }
+        if (s.fontFamily) { families[s.fontFamily] = (families[s.fontFamily] || 0) + 1; }
+        ['marginTop', 'marginBottom', 'paddingTop', 'paddingBottom', 'gap', 'lineHeight'].forEach(function(prop) {
+          var v = s[prop];
+          if (v && v !== '0px' && v !== '0' && v !== '' && v !== 'normal') {
+            spacing[v] = (spacing[v] || 0) + 1;
+          }
+        });
+      }
+      function topN(obj, n) {
+        return Object.keys(obj).sort(function(a, b) { return obj[b] - obj[a]; }).slice(0, n).map(function(k) { return { value: k, count: obj[k] }; });
+      }
+      return { colors: topN(colors, 8), fontSizes: topN(sizes, 6), fontFamilies: topN(families, 4), spacing: topN(spacing, 6) };
+    }
+
+    function _findFirstPage(nodes) {
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].type !== 'folder') return nodes[i];
+      }
+      return null;
+    }
+
+    // Pages/versions app facade — tree model with folder/page support
     var appFacade = CC.app = {
       pages: state.get('pages.list') || [],
       currentPage: null,
       snapshot: snapshot,
       differ: versionDiffer,
-      addPage: function(name) {
+      addPage: function(name, parentId) {
+        _saveCurrentToPage();
         var pages = state.get('pages.list') || [];
-        var id = 'page-' + Date.now();
-        pages.push({ id: id, name: name, module: '', html: '' });
+        var id = 'page-' + _uid();
+        var order = 0;
+        for (var i = 0; i < pages.length; i++) {
+          if (pages[i].parentId === (parentId || null)) order = Math.max(order, pages[i].order || 0);
+        }
+        var newPage = {
+          id: id, type: 'page', name: name || '未命名页面',
+          parentId: parentId || null, order: order + 1,
+          html: '', thumbnail: '', updatedAt: Date.now(),
+          expanded: false
+        };
+        pages.push(newPage);
         state.set('pages.list', pages);
         appFacade.pages = pages;
-        toast.show('页面「' + name + '」已添加', 'success');
+        // Don't switch to the new page — just add it to the list
+        bus.emit('page:added', id);
+        toast.show('页面「' + name + '」已创建', 'success');
+      },
+      addFolder: function(name, parentId) {
+        var pages = state.get('pages.list') || [];
+        var id = 'folder-' + _uid();
+        var order = 0;
+        for (var i = 0; i < pages.length; i++) {
+          if (pages[i].parentId === (parentId || null)) order = Math.max(order, pages[i].order || 0);
+        }
+        var folder = {
+          id: id, type: 'folder', name: name || '新文件夹',
+          parentId: parentId || null, order: order + 1,
+          expanded: true, updatedAt: Date.now()
+        };
+        pages.push(folder);
+        state.set('pages.list', pages);
+        appFacade.pages = pages;
+        bus.emit('page:added', id);
+        toast.show('文件夹「' + name + '」已创建', 'success');
+      },
+      toggleFolder: function(id) {
+        var node = _findNode(id);
+        if (node && node.type === 'folder') {
+          node.expanded = !node.expanded;
+          state.set('pages.list', (state.get('pages.list') || []).slice());
+          bus.emit('page:toggled', id);
+        }
       },
       renamePage: function(id, name) {
-        var pages = state.get('pages.list') || [];
-        for (var i = 0; i < pages.length; i++) {
-          if (pages[i].id === id) { pages[i].name = name; break; }
-        }
-        state.set('pages.list', pages);
-        appFacade.pages = pages;
+        var node = _findNode(id);
+        if (node) { node.name = name; node.updatedAt = Date.now(); }
+        state.set('pages.list', (state.get('pages.list') || []).slice());
+        appFacade.pages = state.get('pages.list');
+        bus.emit('page:renamed', id);
       },
       deletePage: function(id) {
         var pages = state.get('pages.list') || [];
-        pages = pages.filter(function(p) { return p.id !== id; });
-        state.set('pages.list', pages);
-        appFacade.pages = pages;
+        // Collect ids to remove (id + all descendants)
+        var removeIds = [id];
+        function collectDescendants(pid) {
+          for (var i = 0; i < pages.length; i++) {
+            if (pages[i].parentId === pid) {
+              removeIds.push(pages[i].id);
+              if (pages[i].type === 'folder') collectDescendants(pages[i].id);
+            }
+          }
+        }
+        collectDescendants(id);
+
+        var remaining = pages.filter(function(p) { return removeIds.indexOf(p.id) === -1; });
+        state.set('pages.list', remaining);
+        appFacade.pages = remaining;
+
+        if (removeIds.indexOf(appFacade.currentPage) !== -1) {
+          // Current page deleted — switch to first available page
+          var target = _findFirstPage(remaining);
+          if (target) {
+            _loadPageToCanvas(target);
+            appFacade.currentPage = target.id;
+          } else {
+            canvasEl.innerHTML = '';
+            appFacade.currentPage = null;
+          }
+        }
+        bus.emit('page:deleted', id);
+        toast.show('已删除', 'success');
       },
       switchPage: function(id) {
+        var node = _findNode(id);
+        if (!node || node.type === 'folder') return;
+        if (id === appFacade.currentPage) return;
+        _saveCurrentToPage();
+        _loadPageToCanvas(node);
         appFacade.currentPage = id;
-        toast.show('已切换到页面', 'info');
+        bus.emit('page:switched', id);
+        toast.show('已切换到「' + node.name + '」', 'info');
+      },
+      moveNode: function(nodeId, newParentId, newOrder) {
+        var node = _findNode(nodeId);
+        if (!node) return;
+        // Prevent moving folder into its own descendant
+        if (newParentId) {
+          var check = newParentId;
+          while (check) {
+            if (check === nodeId) return;
+            var parent = _findNode(check);
+            check = parent ? parent.parentId : null;
+          }
+        }
+        node.parentId = newParentId || null;
+        node.order = newOrder || 0;
+        state.set('pages.list', (state.get('pages.list') || []).slice());
+        appFacade.pages = state.get('pages.list');
+        bus.emit('page:moved', nodeId);
       },
       importPages: function(files) {
-        // Delegate to toolbar:import for each file
         if (!files || !files.length) return;
-        var count = 0;
+        _saveCurrentToPage();
+        var pages = state.get('pages.list') || [];
+        var pending = files.length;
+        var imported = 0;
+        var lastPageId = null;
+
+        // Build folder structure from webkitRelativePath
+        function _ensureFolder(pathParts) {
+          var currentParentId = null;
+          for (var i = 0; i < pathParts.length; i++) {
+            var folderName = pathParts[i];
+            var existing = null;
+            for (var j = 0; j < pages.length; j++) {
+              if (pages[j].type === 'folder' && pages[j].name === folderName && pages[j].parentId === currentParentId) {
+                existing = pages[j];
+                break;
+              }
+            }
+            if (existing) {
+              existing.expanded = true;
+              currentParentId = existing.id;
+            } else {
+              var fid = 'folder-' + _uid();
+              var folderOrder = 0;
+              for (var k = 0; k < pages.length; k++) {
+                if (pages[k].parentId === currentParentId) folderOrder = Math.max(folderOrder, pages[k].order || 0);
+              }
+              var newFolder = {
+                id: fid, type: 'folder', name: folderName,
+                parentId: currentParentId, order: folderOrder + 1,
+                expanded: true, updatedAt: Date.now()
+              };
+              pages.push(newFolder);
+              currentParentId = fid;
+            }
+          }
+          return currentParentId;
+        }
+
         Array.from(files).forEach(function(file) {
           var reader = new FileReader();
           reader.onload = function(ev) {
             var name = file.name.replace(/\.[^.]+$/, '');
-            appFacade.addPage(name);
-            count++;
+            var relativePath = file.webkitRelativePath || '';
+            var parentId = null;
+
+            // Create folder hierarchy from path
+            if (relativePath) {
+              var parts = relativePath.split('/');
+              if (parts.length > 1) {
+                parentId = _ensureFolder(parts.slice(0, -1));
+              }
+            }
+
+            var order = 0;
+            for (var k = 0; k < pages.length; k++) {
+              if (pages[k].parentId === parentId) order = Math.max(order, pages[k].order || 0);
+            }
+
+            var id = 'page-' + _uid();
+            var htmlContent = ev.target.result;
+            pages.push({
+              id: id, type: 'page', name: name,
+              parentId: parentId, order: order + 1,
+              html: htmlContent, thumbnail: '', updatedAt: Date.now(),
+              expanded: false
+            });
+            lastPageId = id;
+            imported++;
+            if (imported === pending) {
+              state.set('pages.list', pages);
+              appFacade.pages = pages;
+              // Load last imported page
+              var lastNode = _findNode(lastPageId);
+              if (lastNode) {
+                _loadPageToCanvas(lastNode);
+                appFacade.currentPage = lastPageId;
+              }
+              bus.emit('page:imported', imported);
+              // Extract design profile from imported pages for AI context
+              setTimeout(function() {
+                var allPages = state.get('pages.list') || [];
+                var allHtml = allPages.filter(function(p) { return p.type === 'page' && p.html; })
+                  .map(function(p) { return p.html; }).join('');
+                if (allHtml) {
+                  var profile = _extractDesignProfile(allHtml);
+                  state.set('settings.designProfile', profile);
+                }
+              }, 0);
+              toast.show('已导入 ' + imported + ' 个页面', 'success');
+            }
           };
           reader.readAsText(file);
         });
-        toast.show('已导入 ' + files.length + ' 个文件', 'success');
       },
       restoreSnapshot: function(id) {
         if (snapshot) {
@@ -223,8 +486,33 @@
       }
     };
 
-    // Instantiate pages/versions tabs with app facade
-    if (typeof CCPagesTab !== 'undefined') pagesTab = new CCPagesTab(appFacade);
+    // ── Initialize default page from current canvas ──────────────
+    (function _initDefaultPage() {
+      var pages = state.get('pages.list') || [];
+      // If no pages exist yet, create a default page from current canvas content
+      if (pages.length === 0 && canvasEl.innerHTML.trim()) {
+        var id = 'page-' + _uid();
+        var defaultPage = {
+          id: id, type: 'page', name: '当前页面',
+          parentId: null, order: 1,
+          html: canvasEl.innerHTML,
+          thumbnail: _captureThumb(canvasEl),
+          updatedAt: Date.now(),
+          expanded: false
+        };
+        pages.push(defaultPage);
+        state.set('pages.list', pages);
+        appFacade.pages = pages;
+        appFacade.currentPage = id;
+      } else if (pages.length > 0 && !appFacade.currentPage) {
+        // Find first page-type node
+        var first = _findFirstPage(pages);
+        if (first) appFacade.currentPage = first.id;
+      }
+    })();
+
+    // Instantiate pages/versions tabs with app facade + modal
+    if (typeof CCPagesTab !== 'undefined') pagesTab = new CCPagesTab(appFacade, modal);
     if (typeof CCVersionsTab !== 'undefined') versionsTab = new CCVersionsTab(appFacade);
 
     // Compare engine

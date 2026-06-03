@@ -34,12 +34,13 @@
       this._buildExportPanel(settings) +
       this._buildAnnotationsPanel(settings);
 
-    this._modal.show('设置', html, [
+    var overlay = this._modal.show('设置', html, [
       { text: '关闭', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } }
     ]);
 
-    // Bind tab switching
-    setTimeout(function () { self._bindTabs(); self._bindFields(); }, 50);
+    // Bind tab switching and field inputs
+    var dialogBody = overlay ? overlay.querySelector('.cc-dialog-body') : null;
+    setTimeout(function () { self._bindTabs(dialogBody); self._bindFields(dialogBody); }, 50);
   };
 
   // ── Tab Panels ──────────────────────────────────────────
@@ -144,9 +145,7 @@
 
   // ── Event Binding ───────────────────────────────────────
 
-  SettingsDialog.prototype._bindTabs = function () {
-    var dialog = document.querySelector('.cc-overlay:last-of-type .cc-dialog-body') ||
-                 document.querySelector('.cc-overlay:last-of-type');
+  SettingsDialog.prototype._bindTabs = function (dialog) {
     if (!dialog) return;
 
     var tabs = dialog.querySelectorAll('.cc-settings-tab');
@@ -164,10 +163,8 @@
     });
   };
 
-  SettingsDialog.prototype._bindFields = function () {
+  SettingsDialog.prototype._bindFields = function (dialog) {
     var self = this;
-    var dialog = document.querySelector('.cc-overlay:last-of-type .cc-dialog-body') ||
-                 document.querySelector('.cc-overlay:last-of-type');
     if (!dialog) return;
 
     // All inputs with data-setting
