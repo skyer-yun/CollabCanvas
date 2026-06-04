@@ -25,7 +25,8 @@
     { name: 'sticky',  label: '便签',  icon: '\u25A8', color: '#d48806', desc: '添加便签备注' },
     { name: 'number',  label: '编号',  icon: '#',      color: '#1677ff', desc: '放置编号标记' },
     { name: 'brush',   label: '画笔',  icon: '\u270E', color: '#ff4d4f', desc: '自由绘制' },
-    { name: 'mosaic',  label: '马赛克', icon: '\u2592', color: '#8c8c8c', desc: '遮罩敏感区域' }
+    { name: 'mosaic',  label: '马赛克', icon: '\u2592', color: '#8c8c8c', desc: '遮罩敏感区域' },
+    { name: 'region',  label: '区域',  icon: '\u25A3', color: '#722ed1', desc: '标注页面区域/模块' }
   ];
 
   function AnnotationsTab(state, eventBus) {
@@ -123,6 +124,8 @@
     actions.className = 'cc-ann-tool-actions';
     actions.innerHTML =
       '<button class="cc-ann-btn-new" data-action="new">\u5FEB\u901F\u6807\u6CE8</button>' +
+      '<button class="cc-ann-btn-import" data-action="import">\u5BFC\u5165</button>' +
+      '<button class="cc-ann-btn-export" data-action="export-copilot">\u5BFC\u51FA</button>' +
       '<button class="cc-ann-btn-clear" data-action="clear-all">\u6E05\u7A7A</button>';
 
     var newBtn = actions.querySelector('[data-action="new"]');
@@ -133,6 +136,19 @@
     clearBtn.addEventListener('click', function() {
       if (self._bus) self._bus.emit('annotation:clear-all', {});
     });
+
+    // v1.5: Import button
+    var importBtn = actions.querySelector('[data-action="import"]');
+    importBtn.addEventListener('click', function() {
+      self._openImportDialog();
+    });
+
+    // v1.5: Export to Copilot format
+    var exportBtn = actions.querySelector('[data-action="export-copilot"]');
+    exportBtn.addEventListener('click', function() {
+      self._exportCopilotFormat();
+    });
+
     section.appendChild(actions);
 
     return section;
@@ -239,12 +255,12 @@
     var TYPE_LABELS = {
       'arrow': '\u7BAD\u5934', 'rect': '\u77E9\u5F62', 'text': '\u6587\u5B57',
       'measure': '\u6D4B\u91CF', 'sticky': '\u4FBF\u7B7E', 'number': '\u7F16\u53F7',
-      'brush': '\u753B\u7B14', 'mosaic': '\u9A6C\u8D5B\u514B'
+      'brush': '\u753B\u7B14', 'mosaic': '\u9A6C\u8D5B\u514B', 'region': '\u533A\u57DF'
     };
     var TYPE_ICONS = {
       'arrow': '\u2192', 'rect': '\u25A1', 'text': 'T',
       'measure': '\u2194', 'sticky': '\u25A8', 'number': '#',
-      'brush': '\u270E', 'mosaic': '\u2592'
+      'brush': '\u270E', 'mosaic': '\u2592', 'region': '\u25A3'
     };
 
     var typeLabel = TYPE_LABELS[ann.type] || ann.type;
@@ -344,8 +360,19 @@
   };
 
   AnnotationsTab.prototype._applyFilter = function(list) {
-    if (this._filter === 'all') return list;
-    return list.filter(function(a) { return a.status === this._filter; }.bind(this));
+    var self = this;
+    var result = list;
+
+    // v1.5: Filter by current page
+    var currentPageId = this._state.get('annotations.currentPageId');
+    if (currentPageId) {
+      result = result.filter(function(a) {
+        return !a.pageId || a.pageId === currentPageId;
+      });
+    }
+
+    if (this._filter === 'all') return result;
+    return result.filter(function(a) { return a.status === self._filter; });
   };
 
   AnnotationsTab.prototype._formatTime = function(ts) {
@@ -604,6 +631,81 @@
     if (listEl) {
       this._container.insertBefore(bar, listEl);
     }
+  };
+
+  // ── v1.5: Import / Export ────────────────────────────────
+
+  AnnotationsTab.prototype._openImportDialog = function () {
+    var self = this;
+    var html = '<div class="cc-comp-form">' +
+      '<div class="cc-comp-row"><label>数据格式</label>' +
+      '<select class="cc-comp-input" id="cc-ann-import-format">' +
+      '<option value="copilot">Copilot 格式 (按页面)</option>' +
+      '<option value="flat">扁平数组</option>' +
+      '<option value="features">功能列表</option>' +
+      '</select></div>' +
+      '<div class="cc-comp-row"><label>JSON 数据</label>' +
+      '<textarea class="cc-comp-input cc-comp-textarea" id="cc-ann-import-data" rows="8" placeholder=\'粘贴 JSON 数据...\'></textarea></div>' +
+      '</div>';
+
+    var modal = window.CCModal;
+    if (!modal) return;
+
+    modal.show('导入标注', html, [
+      { text: '取消', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } },
+      {
+        text: '导入', cls: 'primary', fn: function (d) {
+          var format = document.getElementById('cc-ann-import-format');
+          var data = document.getElementById('cc-ann-import-data');
+          if (!data || !data.value.trim()) return;
+
+          var importer = window.__CC && window.__CC.annotationImporter;
+          if (!importer) {
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('标注导入模块未加载', 'error');
+            return;
+          }
+
+          var result;
+          try {
+            var fmt = format ? format.value : 'copilot';
+            if (fmt === 'copilot') {
+              result = importer.importCopilotFormat(data.value);
+            } else if (fmt === 'flat') {
+              result = importer.importFlatFormat(data.value);
+            } else {
+              result = importer.importFeatureList(data.value);
+            }
+
+            var msg = '导入完成: ' + result.imported + ' 条成功';
+            if (result.skipped > 0) msg += ', ' + result.skipped + ' 条跳过';
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show(msg, 'success');
+            self._drawList();
+          } catch (e) {
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('导入失败: ' + e.message, 'error');
+          }
+
+          if (d && d.parentElement) d.parentElement.remove();
+        }
+      }
+    ]);
+  };
+
+  AnnotationsTab.prototype._exportCopilotFormat = function () {
+    var exporter = window.__CC && window.__CC.annotationExporter;
+    if (!exporter) {
+      if (window.__CC && window.__CC.toast) window.__CC.toast.show('标注导出模块未加载', 'error');
+      return;
+    }
+
+    var json = exporter.toCopilotJSON({ includeCoordinates: true });
+    var blob = new Blob([json], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'annotations-copilot.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    if (window.__CC && window.__CC.toast) window.__CC.toast.show('Copilot 格式标注已导出', 'success');
   };
 
   AnnotationsTab.prototype.destroy = function() {

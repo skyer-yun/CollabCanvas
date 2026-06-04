@@ -106,7 +106,9 @@
     }
   };
 
-  function TokenImporter() {}
+  function TokenImporter() {
+    this._designSystems = null; // Set by main.js after CCDesignSystems instantiation
+  }
 
   /**
    * Parse CSS variable declarations from text.
@@ -171,11 +173,22 @@
 
   /**
    * Get a preset template by name.
-   * @param {string} presetName - 'ant-design' | 'tailwind' | 'element-plus'
+   * v1.4: Delegates to CCDesignSystems first, falls back to embedded PRESETS.
+   * @param {string} presetName - 'ant-design' | 'tailwind' | 'element-plus' | any DS id
    * @returns {Array} normalized token array
    */
   TokenImporter.prototype.getPreset = function(presetName) {
-    var preset = PRESETS[presetName];
+    // v1.4: Try CCDesignSystems (6 built-in)
+    if (this._designSystems) {
+      var dsTokens = this._designSystems.getTokens(presetName);
+      if (dsTokens) return dsTokens;
+    }
+
+    // Map old preset names to new DS ids
+    var mapped = presetName;
+    if (presetName === 'ant-design') mapped = 'ant-design-pro';
+
+    var preset = PRESETS[mapped];
     if (!preset) {
       console.warn('[CCTokenImporter] unknown preset:', presetName);
       return [];
@@ -199,10 +212,61 @@
 
   /**
    * Get list of available preset names.
-   * @returns {string[]}
+   * v1.4: Merges embedded + CCDesignSystems systems.
+   * @returns {Array<{id: string, name: string}>}
    */
   TokenImporter.prototype.listPresets = function() {
-    return Object.keys(PRESETS);
+    var result = [];
+    var seen = {};
+
+    // CCDesignSystems first (6 systems)
+    if (this._designSystems) {
+      var systems = this._designSystems.listSystems();
+      for (var i = 0; i < systems.length; i++) {
+        result.push({ id: systems[i].id, name: systems[i].name });
+        seen[systems[i].id] = true;
+      }
+    }
+
+    // Embedded PRESETS (3 systems)
+    for (var key in PRESETS) {
+      if (PRESETS.hasOwnProperty(key) && !seen[key]) {
+        result.push({ id: key, name: key });
+      }
+    }
+
+    return result;
+  };
+
+  /**
+   * v1.4: Auto-detect and import from text (CSS/JSON/Markdown).
+   * Delegates to CCDesignSystems.importAuto().
+   * @param {string} text - File content
+   * @param {string} [filename] - Filename for format hint
+   * @returns {Array|null} flat token array or null
+   */
+  TokenImporter.prototype.importAuto = function(text, filename) {
+    if (this._designSystems) {
+      var parsed = this._designSystems.importAuto(text, filename);
+      if (parsed) {
+        var flat = [];
+        var cats = ['colors', 'typography', 'spacing', 'radius', 'shadows'];
+        for (var i = 0; i < cats.length; i++) {
+          var items = parsed.tokens[cats[i]];
+          if (items) {
+            for (var j = 0; j < items.length; j++) {
+              flat.push({ name: items[j].name, value: items[j].value, category: cats[i] });
+            }
+          }
+        }
+        return flat;
+      }
+    }
+    // Fallback: try JSON then CSS
+    if (filename && filename.endsWith('.json')) {
+      return this.importJSON(text);
+    }
+    return this.importCSS(text);
   };
 
   /**

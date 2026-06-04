@@ -56,6 +56,8 @@
       requirementType: data.requirementType || 'functional',
       acceptanceCriteria: data.acceptanceCriteria || '',
       requirementId: data.requirementId || '',
+      pageId: data.pageId || null,
+      target: data.target || null,
       timestamp: Date.now()
     };
 
@@ -93,7 +95,7 @@
     if (!annotation) return null;
 
     // Whitelist of updatable fields
-    var allowed = ['type', 'x', 'y', 'w', 'h', 'text', 'color', 'status', 'assignee', 'module', 'priority', 'requirementType', 'acceptanceCriteria', 'requirementId'];
+    var allowed = ['type', 'x', 'y', 'w', 'h', 'text', 'color', 'status', 'assignee', 'module', 'priority', 'requirementType', 'acceptanceCriteria', 'requirementId', 'pageId', 'target'];
 
     // Create new array + new annotation object (immutable)
     var newList = list.slice();
@@ -166,6 +168,7 @@
       if (filter.priority && ann.priority !== filter.priority) return false;
       if (filter.requirementType && ann.requirementType !== filter.requirementType) return false;
       if (filter.requirementId && ann.requirementId !== filter.requirementId) return false;
+      if (filter.pageId !== undefined && ann.pageId !== filter.pageId) return false;
       return true;
     });
   };

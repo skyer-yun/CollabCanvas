@@ -324,5 +324,134 @@
     return num;
   }
 
+  // ── v1.5: Copilot Format Export ────────────────────────────────
+
+  /**
+   * Export annotations to Product Copilot format.
+   * Output: {pageId: [{id, title, target, content, priority, module, ...}]}
+   *
+   * @param {Object} [options] - {includeCoordinates: Boolean}
+   * @returns {Object}
+   */
+  AnnotationExporter.prototype.toCopilotFormat = function (options) {
+    var data = this._buildStructuredData();
+    var opts = options || {};
+    var result = {};
+
+    for (var i = 0; i < data.length; i++) {
+      var d = data[i];
+      var pageId = d.pageId || '_unassigned';
+
+      if (!result[pageId]) result[pageId] = [];
+
+      var entry = {
+        id: d.id || '',
+        title: d.text || '',
+        target: d.target || this._buildSelector(d),
+        content: d.text || '',
+        priority: d.priority || 'medium',
+        module: d.module || '',
+        status: d.status || 'pending',
+        requirementType: d.requirementType || 'functional',
+        acceptanceCriteria: d.acceptanceCriteria || ''
+      };
+
+      if (opts.includeCoordinates) {
+        entry.x = d.x;
+        entry.y = d.y;
+        entry.w = d.w;
+        entry.h = d.h;
+      }
+
+      result[pageId].push(entry);
+    }
+
+    return result;
+  };
+
+  /**
+   * Export annotations to Copilot format as JSON string.
+   * @param {Object} [options]
+   * @returns {string}
+   */
+  AnnotationExporter.prototype.toCopilotJSON = function (options) {
+    return JSON.stringify(this.toCopilotFormat(options), null, 2);
+  };
+
+  /**
+   * Build a CSS selector from annotation coordinates.
+   * Uses elementFromPoint() to find the element at annotation position.
+   *
+   * @param {Object} ann - Annotation with x, y coordinates
+   * @returns {string|null} CSS selector or null
+   */
+  AnnotationExporter.prototype._buildSelector = function (ann) {
+    if (!ann || ann.x === undefined || ann.y === undefined) return null;
+
+    var canvas = this._state.get('canvas.canvas');
+    if (!canvas) return null;
+
+    var canvasRect = canvas.getBoundingClientRect();
+    var zoom = this._state.get('canvas.zoom') || 1;
+    var panX = this._state.get('canvas.panX') || 0;
+    var panY = this._state.get('canvas.panY') || 0;
+
+    // Convert canvas-relative coords to viewport coords
+    var viewX = canvasRect.left + ann.x * zoom + panX;
+    var viewY = canvasRect.top + ann.y * zoom + panY;
+
+    var el = document.elementFromPoint(viewX, viewY);
+    if (!el || el === canvas || el === document.documentElement || el === document.body) return null;
+
+    // Build selector: prefer id, then class + tag, then nth-child path
+    if (el.id) return '#' + el.id;
+
+    var selector = el.tagName.toLowerCase();
+    if (el.className && typeof el.className === 'string') {
+      var classes = el.className.trim().split(/\s+/).filter(function (c) {
+        return c.indexOf('cc-') !== 0 && c.indexOf('annotation') !== 0;
+      });
+      if (classes.length > 0) {
+        selector += '.' + classes.slice(0, 2).join('.');
+      }
+    }
+
+    // Check uniqueness
+    var matches = document.querySelectorAll(selector);
+    if (matches.length === 1) return selector;
+
+    // Fall back to nth-child path
+    return this._buildNthChildSelector(el);
+  };
+
+  /**
+   * Build a full nth-child selector path from root to element.
+   */
+  AnnotationExporter.prototype._buildNthChildSelector = function (el) {
+    var parts = [];
+    var current = el;
+    var maxDepth = 5;
+
+    while (current && current !== document.body && current !== document.documentElement && parts.length < maxDepth) {
+      var tag = current.tagName.toLowerCase();
+      if (tag === 'div' || tag === 'span') tag = ''; // omit generic tags
+
+      var parent = current.parentElement;
+      if (parent) {
+        var siblings = parent.children;
+        var index = 1;
+        for (var i = 0; i < siblings.length; i++) {
+          if (siblings[i] === current) break;
+          if (siblings[i].tagName === current.tagName) index++;
+        }
+        var part = (tag || current.tagName.toLowerCase()) + ':nth-child(' + (Array.prototype.indexOf.call(parent.children, current) + 1) + ')';
+        parts.unshift(part);
+      }
+      current = parent;
+    }
+
+    return parts.length > 0 ? parts.join(' > ') : null;
+  };
+
   window.CCAnnotationExporter = AnnotationExporter;
 })();

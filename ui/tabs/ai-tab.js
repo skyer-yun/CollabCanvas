@@ -560,7 +560,16 @@
       '- {"action":"select","selector":"#id"} — 选中元素\n' +
       '- {"action":"setStyle","selector":"#id","property":"color","value":"red"} — 修改样式\n' +
       '- {"action":"annotate","x":100,"y":200,"text":"文字"} — 添加标注\n' +
+      '- {"action":"insertHTML","html":"<div>...</div>","parent":"#container","position":"append"} — 插入 HTML 元素\n' +
+      '- {"action":"replaceHTML","selector":"#id","html":"<div>...</div>"} — 替换元素 HTML\n' +
+      '- {"action":"applyToken","selector":"#id","token":"--cc-primary"} — 应用设计令牌\n' +
+      '- {"action":"batchStyle","selector":".my-class","styles":{"color":"var(--cc-primary)","font-size":"14px"}} — 批量修改样式\n' +
+      '- {"action":"removeElement","selector":"#id"} — 删除元素\n' +
       designPrompt;
+
+    // v1.5: Inject systemPromptExtra (PRD / project context from Product Copilot)
+    var extra = this._state.get('settings.ai.systemPromptExtra');
+    if (extra) systemPrompt += '\n\n' + extra;
 
     var chatMessages = [{ role: 'system', content: systemPrompt + '\n' + context }];
     for (var i = 0; i < conv.messages.length; i++) {
@@ -765,6 +774,28 @@
     this._draw();
   };
 
+  // v1.5: Export conversation as Markdown
+  AITab.prototype._exportConversation = function (conv) {
+    if (!conv || !conv.messages) return;
+    var lines = ['# ' + (conv.title || 'AI 对话'), ''];
+    for (var i = 0; i < conv.messages.length; i++) {
+      var msg = conv.messages[i];
+      var role = msg.role === 'user' ? '用户' : (msg.role === 'assistant' ? 'AI' : '系统');
+      var ts = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+      lines.push('## ' + role + (ts ? ' (' + ts + ')' : ''));
+      lines.push(msg.content || '');
+      lines.push('');
+    }
+    var md = lines.join('\n');
+    var blob = new Blob([md], { type: 'text/markdown' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'conversation-' + conv.id + '.md';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   AITab.prototype._updateSidebarFooter = function () {
     if (this._sidebarEl) {
       var footer = this._sidebarEl.querySelector('.cc-ai-sidebar-footer');
@@ -813,6 +844,78 @@
             var ann = annotator.create({ type: 'text', x: cmd.x, y: cmd.y, text: cmd.text || 'AI 标注', color: '#722ed1' });
             var renderer = window.__CC && window.__CC.annotationRenderer;
             if (renderer && ann) renderer.render(ann);
+          }
+        }
+        break;
+      // v1.5: New AI commands
+      case 'insertHTML':
+        if (cmd.html) {
+          var parent = cmd.parent ? document.querySelector(cmd.parent) : null;
+          if (!parent) parent = this._state.get('canvas.canvas');
+          if (parent) {
+            var temp = document.createElement('div');
+            temp.innerHTML = cmd.html;
+            var pos = cmd.position || 'append';
+            if (pos === 'prepend' && parent.firstChild) {
+              parent.insertBefore(temp.firstChild, parent.firstChild);
+            } else if (pos === 'before') {
+              parent.parentNode.insertBefore(temp.firstChild, parent);
+            } else if (pos === 'after') {
+              if (parent.nextSibling) {
+                parent.parentNode.insertBefore(temp.firstChild, parent.nextSibling);
+              } else {
+                parent.parentNode.appendChild(temp.firstChild);
+              }
+            } else {
+              while (temp.firstChild) parent.appendChild(temp.firstChild);
+            }
+            if (bus) bus.emit('history:recorded', { prop: 'insertHTML', html: cmd.html });
+          }
+        }
+        break;
+      case 'replaceHTML':
+        if (cmd.selector && cmd.html) {
+          var replTarget = document.querySelector(cmd.selector);
+          if (replTarget) {
+            var oldHTML = replTarget.innerHTML;
+            replTarget.innerHTML = cmd.html;
+            if (bus) bus.emit('history:recorded', { prop: 'replaceHTML', selector: cmd.selector, oldVal: oldHTML, newVal: cmd.html });
+          }
+        }
+        break;
+      case 'applyToken':
+        if (cmd.selector && cmd.token) {
+          var tokenTarget = document.querySelector(cmd.selector);
+          if (tokenTarget) {
+            var rootStyle = getComputedStyle(document.documentElement);
+            var tokenVal = rootStyle.getPropertyValue(cmd.token).trim();
+            if (tokenVal) {
+              // Apply token as CSS variable reference
+              var prop = cmd.property || 'color';
+              tokenTarget.style[prop] = 'var(' + cmd.token + ')';
+              if (bus) bus.emit('history:recorded', { prop: 'applyToken', selector: cmd.selector, token: cmd.token });
+            }
+          }
+        }
+        break;
+      case 'batchStyle':
+        if (cmd.selector && cmd.styles) {
+          var batchTargets = document.querySelectorAll(cmd.selector);
+          for (var bi = 0; bi < batchTargets.length; bi++) {
+            var styleKeys = Object.keys(cmd.styles);
+            for (var si = 0; si < styleKeys.length; si++) {
+              batchTargets[bi].style[styleKeys[si]] = cmd.styles[styleKeys[si]];
+            }
+          }
+          if (bus) bus.emit('history:recorded', { prop: 'batchStyle', selector: cmd.selector, styles: cmd.styles });
+        }
+        break;
+      case 'removeElement':
+        if (cmd.selector) {
+          var removeTarget = document.querySelector(cmd.selector);
+          if (removeTarget && removeTarget.parentNode) {
+            removeTarget.parentNode.removeChild(removeTarget);
+            if (bus) bus.emit('history:recorded', { prop: 'removeElement', selector: cmd.selector });
           }
         }
         break;
@@ -917,7 +1020,57 @@
       }
     }
 
-    return parts.length > 0 ? '\n\n' + parts.join('\n') : '';
+    var result = parts.length > 0 ? '\n\n' + parts.join('\n') : '';
+
+    // v1.4: Inject active design system metadata
+    var dsInfo = this._getActiveDesignSystemInfo();
+    if (dsInfo) result += dsInfo;
+
+    return result;
+  };
+
+  /**
+   * v1.4: Get active design system info for AI prompt injection.
+   */
+  AITab.prototype._getActiveDesignSystemInfo = function () {
+    var activeDS = this._state.get('settings.activeDesignSystem');
+    if (!activeDS || typeof CCDesignSystems === 'undefined') return '';
+
+    var systems = new CCDesignSystems(this._state, this._bus);
+    var info = systems.listSystems().filter(function (s) { return s.id === activeDS; });
+    if (info.length === 0) return '';
+
+    var ds = info[0];
+    var tokens = systems.getTokens(activeDS);
+    if (!tokens || tokens.length === 0) return '';
+
+    var lines = [
+      '\n## 活跃设计系统',
+      '当前项目使用 **' + ds.name + '** (' + ds.version + ') — ' + ds.description + '。',
+      '包含 ' + ds.tokenCount + ' 个设计令牌。生成代码时必须使用这些令牌变量。',
+      ''
+    ];
+
+    // Group tokens by category for the prompt
+    var grouped = {};
+    tokens.forEach(function (t) {
+      if (!grouped[t.category]) grouped[t.category] = [];
+      grouped[t.category].push(t);
+    });
+
+    var catLabels = { colors: '颜色', typography: '排版', spacing: '间距', radius: '圆角', shadows: '阴影' };
+    var catOrder = ['colors', 'typography', 'spacing', 'radius', 'shadows'];
+    for (var i = 0; i < catOrder.length; i++) {
+      var cat = catOrder[i];
+      if (!grouped[cat] || grouped[cat].length === 0) continue;
+      lines.push('### ' + catLabels[cat]);
+      grouped[cat].forEach(function (t) {
+        lines.push('- ' + t.name + ': ' + t.value);
+      });
+      lines.push('');
+    }
+
+    return '\n' + lines.join('\n');
   };
 
   /**

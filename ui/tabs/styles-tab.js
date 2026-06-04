@@ -19,6 +19,16 @@
     'element-plus': 'Element Plus'
   };
 
+  // v1.4: 6 design systems for preset grid
+  var DS_ORDER = [
+    { id: 'ant-design-pro', name: 'Ant Design Pro', desc: '企业级中后台' },
+    { id: 'tdesign', name: 'TDesign', desc: '腾讯系企业级' },
+    { id: 'element-plus', name: 'Element Plus', desc: 'Vue 生态 / 政企' },
+    { id: 'arco-design', name: 'Arco Design', desc: '字节系 / 现代后台' },
+    { id: 'semi-design', name: 'Semi Design', desc: '暗色模式 / SaaS' },
+    { id: 'shadcn-ui', name: 'shadcn/ui', desc: 'React + Tailwind' }
+  ];
+
   function StylesTab(state, eventBus) {
     this._state = state;
     this._bus = eventBus;
@@ -47,13 +57,23 @@
 
     var html = '<div class="cc-styles-tab">';
 
-    // Header with action buttons
+    // Header with active design system badge + action buttons
+    var activeDS = this._state.get('settings.activeDesignSystem');
     html += '<div class="cc-styles-header">';
     html += '<span class="cc-styles-title">设计令牌</span>';
+    if (activeDS) {
+      var dsInfo = DS_ORDER.filter(function(d) { return d.id === activeDS; })[0];
+      var badgeName = dsInfo ? dsInfo.name : activeDS;
+      html += '<span class="cc-styles-active-badge">' + this._escapeHtml(badgeName) + '</span>';
+    }
     html += '<div class="cc-styles-actions">';
     html += '<button class="cc-styles-preset-btn" data-action="presets">预设</button>';
-    html += '<button class="cc-styles-extract-btn" data-action="extract">从页面提取</button>';
+    html += '<button class="cc-styles-extract-btn" data-action="extract">提取</button>';
     html += '<button class="cc-styles-import-btn" data-action="import">导入</button>';
+    html += '<button class="cc-styles-export-btn" data-action="export">导出</button>';
+    if (activeDS) {
+      html += '<button class="cc-styles-clear-btn" data-action="clear">清除</button>';
+    }
     html += '</div></div>';
 
     // Category tabs
@@ -85,16 +105,33 @@
 
     html += '</div>';
 
-    // Presets panel (toggle)
+    // Presets panel (toggle) — v1.4: dynamic grid with 6 DS
     if (this._showPresets) {
       html += '<div class="cc-styles-presets">';
       html += '<div class="cc-styles-presets-title">选择预设设计系统</div>';
-      for (var preset in PRESET_NAMES) {
-        if (PRESET_NAMES.hasOwnProperty(preset)) {
-          html += '<button class="cc-styles-preset-item" data-preset="' + preset + '">' +
-            PRESET_NAMES[preset] + '</button>';
+      html += '<div class="cc-styles-presets-grid">';
+      for (var d = 0; d < DS_ORDER.length; d++) {
+        var ds = DS_ORDER[d];
+        var isActive = (activeDS === ds.id);
+        // Count tokens for badge
+        var sys = typeof CCDesignSystems !== 'undefined' ? new CCDesignSystems(this._state, this._bus) : null;
+        var tkCount = 0;
+        if (sys) {
+          var tkArr = sys.getTokens(ds.id);
+          if (tkArr) tkCount = tkArr.length;
         }
+        html += '<div class="cc-styles-ds-card' + (isActive ? ' active' : '') + '" data-preset="' + ds.id + '">';
+        html += '<div class="cc-styles-ds-name">' + this._escapeHtml(ds.name) + '</div>';
+        html += '<div class="cc-styles-ds-desc">' + this._escapeHtml(ds.desc) + '</div>';
+        if (tkCount > 0) {
+          html += '<div class="cc-styles-ds-count">' + tkCount + ' tokens</div>';
+        }
+        if (isActive) {
+          html += '<div class="cc-styles-ds-check">&#10003;</div>';
+        }
+        html += '</div>';
       }
+      html += '</div>';
       html += '</div>';
     }
 
@@ -224,13 +261,44 @@
       });
     }
 
-    // Preset items
-    var presetItems = this._container.querySelectorAll('.cc-styles-preset-item');
-    for (var k = 0; k < presetItems.length; k++) {
-      presetItems[k].addEventListener('click', function() {
+    // Preset items — v1.4: DS cards
+    var dsCards = this._container.querySelectorAll('.cc-styles-ds-card');
+    for (var k = 0; k < dsCards.length; k++) {
+      dsCards[k].addEventListener('click', function() {
         var preset = this.getAttribute('data-preset');
         if (self._bus) self._bus.emit('token:load-preset', { preset: preset });
         self._showPresets = false;
+      });
+    }
+
+    // v1.4: Export button
+    var exportBtn = this._container.querySelector('[data-action="export"]');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', function() {
+        if (!self._container) return;
+        // Toggle export dropdown
+        var existing = self._container.querySelector('.cc-styles-export-dropdown');
+        if (existing) { existing.remove(); return; }
+        var dd = document.createElement('div');
+        dd.className = 'cc-styles-export-dropdown';
+        dd.innerHTML = '<button data-format="css">导出 CSS</button><button data-format="json">导出 JSON</button>';
+        exportBtn.parentElement.style.position = 'relative';
+        exportBtn.parentElement.appendChild(dd);
+        dd.querySelectorAll('button').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var fmt = this.getAttribute('data-format');
+            if (self._bus) self._bus.emit('token:export', { format: fmt });
+            dd.remove();
+          });
+        });
+      });
+    }
+
+    // v1.4: Clear button
+    var clearBtn = this._container.querySelector('[data-action="clear"]');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function() {
+        if (self._bus) self._bus.emit('token:clear', {});
       });
     }
   };

@@ -54,6 +54,10 @@
       this._row('作者', '<input class="cc-comp-input" data-setting="project.author" value="' + this._esc(p.author) + '" placeholder="输入作者">') +
       this._row('描述', '<textarea class="cc-comp-input cc-comp-textarea" data-setting="project.description" rows="3" placeholder="项目描述">' + this._esc(p.description) + '</textarea>') +
       this._row('页面URL', '<input class="cc-comp-input" data-setting="project.pageUrl" value="' + this._esc(p.pageUrl || location.href) + '" readonly style="background:#f5f5f5;">') +
+      '<div style="border-top:1px solid #eee;margin:8px 0;"></div>' +
+      this._row('设计系统', '<input class="cc-comp-input" data-setting="project.designSystem" value="' + this._esc(p.designSystem) + '" placeholder="如: Ant Design Pro, TDesign">') +
+      this._row('技术框架', '<input class="cc-comp-input" data-setting="project.framework" value="' + this._esc(p.framework) + '" placeholder="如: React, Vue, Next.js">') +
+      this._row('功能摘要', '<textarea class="cc-comp-input cc-comp-textarea" data-setting="project.featureSummary" rows="3" placeholder="简述项目核心功能模块，供 AI 生成参考">' + this._esc(p.featureSummary) + '</textarea>') +
       '</div></div>';
   };
 
@@ -69,6 +73,8 @@
       this._row('API Key', '<input class="cc-comp-input" type="password" data-setting="ai.apiKey" value="' + this._esc(ai.apiKey) + '" placeholder="sk-...">') +
       this._row('端点URL', '<input class="cc-comp-input" data-setting="ai.endpoint" value="' + this._esc(ai.endpoint) + '" placeholder="https://api.example.com" id="cc-ai-endpoint">') +
       this._row('模型名', '<input class="cc-comp-input" data-setting="ai.model" value="' + this._esc(ai.model) + '" placeholder="claude-sonnet-4-20250514">') +
+      '<div style="border-top:1px solid #eee;margin:8px 0;"></div>' +
+      this._row('System Prompt 附加', '<textarea class="cc-comp-input cc-comp-textarea" data-setting="ai.systemPromptExtra" rows="4" placeholder="额外注入到 AI 系统提示中的内容，如 PRD 摘要、设计规范等">' + this._esc(ai.systemPromptExtra) + '</textarea>') +
       '<div class="cc-comp-row"><label></label>' +
       '<button class="cc-btn" id="cc-ai-test-btn" style="font-size:11px;padding:4px 12px;">测试连接</button>' +
       '</div>' +

@@ -155,6 +155,24 @@
     if (typeof CCTokenizer !== 'undefined') { tokenizer = CC.tokenizer = new CCTokenizer(state); }
     if (typeof CCTokenImporter !== 'undefined') { tokenImporter = CC.tokenImporter = new CCTokenImporter(); }
 
+    // v1.4: Design Systems registry
+    var designSystems = null;
+    if (typeof CCDesignSystems !== 'undefined') {
+      designSystems = new CCDesignSystems(state, bus);
+      CC._designSystems = designSystems;
+      if (tokenImporter) tokenImporter._designSystems = designSystems;
+    }
+
+    // v1.5: Annotation Importer + Design Audit
+    var annotationImporter = null;
+    if (typeof CCAnnotationImporter !== 'undefined') {
+      annotationImporter = CC.annotationImporter = new CCAnnotationImporter(state, bus);
+    }
+    var designAudit = null;
+    if (typeof CCDesignAudit !== 'undefined') {
+      designAudit = CC.designAudit = new CCDesignAudit(state, bus);
+    }
+
     // Version system instances
     var snapshot = null;
     var versionDiffer = null;
@@ -357,6 +375,8 @@
         _saveCurrentToPage();
         _loadPageToCanvas(node);
         appFacade.currentPage = id;
+        // v1.5: Set current page for annotation filtering
+        state.set('annotations.currentPageId', id);
         bus.emit('page:switched', id);
         toast.show('已切换到「' + node.name + '」', 'info');
       },
@@ -1140,6 +1160,41 @@
       bus.emit('annotation:updated', {});
     });
 
+    // v1.5: Annotation import event
+    bus.on('annotation:import-request', function() {
+      // Triggered from annotations tab — handled directly in tab UI
+    });
+
+    // v1.5: Design audit event
+    bus.on('design:audit', function(opts) {
+      if (!designAudit) {
+        toast.show('设计审计模块未加载', 'error');
+        return;
+      }
+      var result = designAudit.audit(opts || {});
+      if (result.summary && result.summary.error) {
+        toast.show(result.summary.error, 'error');
+        return;
+      }
+      bus.emit('design:audit-result', result);
+      toast.show('审计完成: ' + result.deviations.length + ' 处偏差', 'info');
+    });
+
+    // v1.5: Detect design system from imported HTML
+    bus.on('design:detect-system', function(html) {
+      if (!designSystems) {
+        toast.show('设计系统模块未加载', 'error');
+        return;
+      }
+      var detected = designSystems.detectSystem(html);
+      if (detected) {
+        toast.show('检测到设计系统: ' + detected.id + ' (置信度 ' + Math.round(detected.confidence * 100) + '%)', 'info');
+        bus.emit('design:system-detected', detected);
+      } else {
+        toast.show('未检测到已知设计系统', 'info');
+      }
+    });
+
     // ── Phase 2A/B/C: AI + PRD Event Handlers ──────────────
 
     // Quick PRD popup after annotation creation
@@ -1288,7 +1343,7 @@
       toast.show('已从页面提取 ' + count + ' 个设计令牌', 'success');
     });
 
-    // Import tokens (file picker)
+    // Import tokens (file picker) — v1.4: supports CSS/JSON/MD
     bus.on('token:import-request', function() {
       if (!tokenImporter || !tokenizer) {
         toast.show('令牌模块未加载', 'info');
@@ -1296,7 +1351,7 @@
       }
       var input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.css,.json';
+      input.accept = '.css,.json,.md,.markdown';
       input.style.display = 'none';
       document.body.appendChild(input);
       input.addEventListener('change', function(e) {
@@ -1305,21 +1360,41 @@
         var reader = new FileReader();
         reader.onload = function(ev) {
           var text = ev.target.result;
-          var tokens;
-          if (file.name.endsWith('.json')) {
-            tokens = tokenImporter.importJSON(text);
+
+          // v1.4: Use design-systems auto-detect if available
+          if (designSystems) {
+            var parsed = designSystems.importAuto(text, file.name);
+            if (parsed) {
+              designSystems.registerCustom(parsed);
+              designSystems.applySystem(parsed.id);
+              bus.emit('tokens:changed', {});
+              var total = 0;
+              var cats = ['colors', 'typography', 'spacing', 'radius', 'shadows'];
+              for (var c = 0; c < cats.length; c++) {
+                if (parsed.tokens[cats[c]]) total += parsed.tokens[cats[c]].length;
+              }
+              toast.show('已导入 ' + file.name + '（' + total + ' 个令牌）', 'success');
+            } else {
+              toast.show('无法解析文件：' + file.name, 'error');
+            }
           } else {
-            tokens = tokenImporter.importCSS(text);
+            // Fallback to old behavior
+            var tokens;
+            if (file.name.endsWith('.json')) {
+              tokens = tokenImporter.importJSON(text);
+            } else {
+              tokens = tokenImporter.importCSS(text);
+            }
+            var count = 0;
+            for (var i = 0; i < tokens.length; i++) {
+              var t = tokens[i];
+              var cat = t.category || 'spacing';
+              tokenizer.add(cat, t.name, t.value);
+              count++;
+            }
+            bus.emit('tokens:changed', {});
+            toast.show('已导入 ' + count + ' 个令牌', 'success');
           }
-          var count = 0;
-          for (var i = 0; i < tokens.length; i++) {
-            var t = tokens[i];
-            var cat = t.category || 'spacing';
-            tokenizer.add(cat, t.name, t.value);
-            count++;
-          }
-          bus.emit('tokens:changed', {});
-          toast.show('已导入 ' + count + ' 个令牌', 'success');
         };
         reader.readAsText(file);
         document.body.removeChild(input);
@@ -1327,21 +1402,64 @@
       input.click();
     });
 
-    // Load preset tokens
+    // Load preset tokens — v1.4: delegates to CCDesignSystems
     bus.on('token:load-preset', function(data) {
-      if (!tokenImporter || !tokenizer) {
+      var presetId = data.preset || data.id;
+      if (designSystems) {
+        var ok = designSystems.applySystem(presetId);
+        if (ok) {
+          bus.emit('tokens:changed', {});
+          var info = designSystems.listSystems().filter(function(s) { return s.id === presetId; });
+          var label = info.length > 0 ? info[0].name : presetId;
+          toast.show('已加载「' + label + '」设计系统', 'success');
+        } else {
+          toast.show('未知预设：' + presetId, 'error');
+        }
+      } else if (tokenImporter && tokenizer) {
+        var tokens = tokenImporter.getPreset(presetId);
+        var count = 0;
+        for (var i = 0; i < tokens.length; i++) {
+          var t = tokens[i];
+          tokenizer.add(t.category, t.name, t.value);
+          count++;
+        }
+        bus.emit('tokens:changed', {});
+        toast.show('已加载预设「' + presetId + '」' + count + ' 个令牌', 'success');
+      } else {
         toast.show('令牌模块未加载', 'info');
-        return;
       }
-      var tokens = tokenImporter.getPreset(data.preset);
-      var count = 0;
-      for (var i = 0; i < tokens.length; i++) {
-        var t = tokens[i];
-        tokenizer.add(t.category, t.name, t.value);
-        count++;
+    });
+
+    // v1.4: Export tokens
+    bus.on('token:export', function(data) {
+      if (!designSystems) { toast.show('设计系统模块未加载', 'info'); return; }
+      var content, filename, mime;
+      if (data.format === 'json') {
+        content = designSystems.exportJSON();
+        filename = 'design-tokens.json';
+        mime = 'application/json';
+      } else {
+        content = designSystems.exportCSS();
+        filename = 'design-tokens.css';
+        mime = 'text/css';
       }
-      bus.emit('tokens:changed', {});
-      toast.show('已加载预设「' + data.preset + '」' + count + ' 个令牌', 'success');
+      var blob = new Blob([content], { type: mime });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.show('已导出 ' + filename, 'success');
+    });
+
+    // v1.4: Clear active design system
+    bus.on('token:clear', function() {
+      if (designSystems) {
+        designSystems.clearActive();
+        bus.emit('tokens:changed', {});
+        toast.show('已清除设计系统', 'success');
+      }
     });
 
     // Apply token to selected element

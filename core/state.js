@@ -23,11 +23,12 @@
       pages: { list: [], current: 0 },
       versions: { snapshots: [], currentId: null },
       tokens: { colors: [], typography: [], spacing: [], shadows: [], radius: [] },
-      annotations: { list: [], currentTool: null },
+      annotations: { list: [], currentTool: null, currentPageId: null },
       settings: {
-        project: { name: '', version: '1.0', author: '', description: '', pageUrl: '' },
-        ai: { provider: 'none', apiKey: '', endpoint: '', model: '', conversationHistory: [], lastError: null, conversations: [], activeConvId: null, tokenUsage: { input: 0, output: 0, requests: 0 } },
+        project: { name: '', version: '1.0', author: '', description: '', pageUrl: '', designSystem: '', framework: '', featureSummary: '' },
+        ai: { provider: 'none', apiKey: '', endpoint: '', model: '', conversationHistory: [], lastError: null, conversations: [], activeConvId: null, tokenUsage: { input: 0, output: 0, requests: 0 }, systemPromptExtra: '' },
         designProfile: { colors: [], fontSizes: [], fontFamilies: [], spacing: [] },
+        activeDesignSystem: null,
         export: { format: 'markdown', includeScreenshots: true, includeAnnotations: true, annotationNumberFormat: 'auto' },
         annotations: { autoNumber: true, defaultColor: '#1677ff', defaultStatus: 'pending', showCoordinates: true, showPRDIndicators: true, defaultModule: '', defaultPriority: 'medium', defaultRequirementType: 'functional' }
       },
