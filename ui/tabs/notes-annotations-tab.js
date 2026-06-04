@@ -72,11 +72,66 @@
     var header = document.createElement('div');
     header.className = 'cc-na-header';
 
-    // Title
+    // Title + current page indicator
+    var titleWrap = document.createElement('div');
+    titleWrap.className = 'cc-na-title-wrap';
+
     var title = document.createElement('span');
     title.className = 'cc-na-title';
-    title.textContent = '备注与标注';
-    header.appendChild(title);
+    title.textContent = '\u5907\u6CE8\u4E0E\u6807\u6CE8';
+    titleWrap.appendChild(title);
+
+    // v1.5: Show current page name
+    var currentPageId = this._state.get('annotations.currentPageId');
+    if (currentPageId) {
+      var pages = this._state.get('pages.list') || [];
+      for (var pi = 0; pi < pages.length; pi++) {
+        if (pages[pi].id === currentPageId && pages[pi].type !== 'folder') {
+          var pageTag = document.createElement('span');
+          pageTag.className = 'cc-na-page-tag';
+          pageTag.textContent = pages[pi].name || currentPageId;
+          titleWrap.appendChild(pageTag);
+          break;
+        }
+      }
+    }
+    header.appendChild(titleWrap);
+
+    // Action buttons row
+    var actions = document.createElement('div');
+    actions.className = 'cc-na-actions';
+
+    // v1.5: Add note button
+    var addBtn = document.createElement('button');
+    addBtn.className = 'cc-na-add-btn';
+    addBtn.textContent = '+ \u5907\u6CE8';
+    addBtn.title = '\u5728\u5F53\u524D\u9875\u9762\u6DFB\u52A0\u5907\u6CE8';
+    addBtn.addEventListener('click', function () {
+      self._openAddNoteDialog();
+    });
+    actions.appendChild(addBtn);
+
+    // v1.5: Import button
+    var importBtn = document.createElement('button');
+    importBtn.className = 'cc-na-import-btn';
+    importBtn.textContent = '\u5BFC\u5165';
+    importBtn.title = '\u5BFC\u5165\u6807\u6CE8\u6570\u636E';
+    importBtn.addEventListener('click', function () {
+      self._openImportDialog();
+    });
+    actions.appendChild(importBtn);
+
+    // v1.5: Export with embedding button
+    var exportBtn = document.createElement('button');
+    exportBtn.className = 'cc-na-embed-btn';
+    exportBtn.textContent = '\u5D4C\u5165';
+    exportBtn.title = '\u5C06\u6807\u6CE8\u5D4C\u5165\u5230\u5BFC\u51FA\u7684 HTML \u4E2D';
+    exportBtn.addEventListener('click', function () {
+      self._exportWithEmbed();
+    });
+    actions.appendChild(exportBtn);
+
+    header.appendChild(actions);
 
     // Display mode buttons
     var modeGroup = document.createElement('div');
@@ -85,7 +140,7 @@
       var btn = document.createElement('button');
       btn.className = 'cc-na-mode-btn' + (self._displayMode === mode ? ' active' : '');
       btn.textContent = DISPLAY_LABELS[mode];
-      btn.title = mode === 'full' ? '完整显示' : mode === 'compact' ? '紧凑显示' : '隐藏标注';
+      btn.title = mode === 'full' ? '\u5B8C\u6574\u663E\u793A' : mode === 'compact' ? '\u7D27\u51D1\u663E\u793A' : '\u9690\u85CF\u6807\u6CE8';
       btn.addEventListener('click', function () {
         self._displayMode = mode;
         self._applyDisplayMode();
@@ -95,13 +150,13 @@
     });
     header.appendChild(modeGroup);
 
-    // Export button
-    var exportBtn = document.createElement('button');
-    exportBtn.className = 'cc-na-export-btn';
-    exportBtn.textContent = '导出';
-    exportBtn.title = '导出标注数据';
-    exportBtn.addEventListener('click', function () { self._showExportDialog(); });
-    header.appendChild(exportBtn);
+    // Original export button (keep for standalone export)
+    var origExportBtn = document.createElement('button');
+    origExportBtn.className = 'cc-na-export-btn';
+    origExportBtn.textContent = '\u5BFC\u51FA';
+    origExportBtn.title = '\u5BFC\u51FA\u6807\u6CE8\u6570\u636E (MD/JSON/PRD)';
+    origExportBtn.addEventListener('click', function () { self._showExportDialog(); });
+    header.appendChild(origExportBtn);
 
     container.appendChild(header);
 
@@ -545,7 +600,11 @@
     var filterModule = this._filterModule;
     var filterPriority = this._filterPriority;
     var filterReqType = this._filterReqType;
+    var currentPageId = this._state.get('annotations.currentPageId');
+
     return list.filter(function (a) {
+      // v1.5: Filter by current page if set
+      if (currentPageId && a.pageId && a.pageId !== currentPageId) return false;
       if (filter !== 'all' && a.status !== filter) return false;
       if (filterModule !== 'all' && a.module !== filterModule) return false;
       if (filterPriority !== 'all' && a.priority !== filterPriority) return false;
@@ -563,6 +622,226 @@
       return String.fromCharCode(64 + num); // 1→A, 2→B, ...
     }
     return num; // 'auto' and '1,2,3' both use digits
+  };
+
+  // ---- v1.5: Add Note Directly ----
+
+  NotesAnnotationsTab.prototype._openAddNoteDialog = function () {
+    var self = this;
+    var currentPageId = this._state.get('annotations.currentPageId');
+
+    var html = '<div class="cc-comp-form">' +
+      '<div class="cc-comp-row"><label>\u5185\u5BB9</label>' +
+      '<textarea class="cc-comp-input cc-comp-textarea" id="cc-na-note-text" rows="4" placeholder="\u8F93\u5165\u5907\u6CE8\u5185\u5BB9"></textarea></div>' +
+      '<div class="cc-comp-row"><label>\u6240\u5C5E\u6A21\u5757</label>' +
+      '<input class="cc-comp-input" id="cc-na-note-module" placeholder="\u5982: \u767B\u5F55\u6A21\u5757"></div>' +
+      '<div class="cc-comp-row"><label>\u4F18\u5148\u7EA7</label>' +
+      '<select class="cc-comp-input" id="cc-na-note-priority">' +
+      '<option value="high">\u9AD8</option>' +
+      '<option value="medium" selected>\u4E2D</option>' +
+      '<option value="low">\u4F4E</option></select></div>' +
+      '<div class="cc-comp-row"><label>\u9700\u6C42\u7C7B\u578B</label>' +
+      '<select class="cc-comp-input" id="cc-na-note-reqtype">' +
+      '<option value="functional">\u529F\u80FD</option>' +
+      '<option value="performance">\u6027\u80FD</option>' +
+      '<option value="security">\u5B89\u5168</option>' +
+      '<option value="ux">\u4F53\u9A8C</option></select></div>' +
+      '</div>';
+
+    var modal = window.CCModal;
+    if (!modal) return;
+
+    modal.show('\u6DFB\u52A0\u5907\u6CE8', html, [
+      { text: '\u53D6\u6D88', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } },
+      {
+        text: '\u6DFB\u52A0', cls: 'primary', fn: function (d) {
+          var textEl = document.getElementById('cc-na-note-text');
+          var moduleEl = document.getElementById('cc-na-note-module');
+          var priorityEl = document.getElementById('cc-na-note-priority');
+          var reqTypeEl = document.getElementById('cc-na-note-reqtype');
+
+          var noteText = textEl ? textEl.value.trim() : '';
+          if (!noteText) return;
+
+          var annotator = window.__CC && window.__CC.annotator;
+          if (!annotator) return;
+
+          var ann = annotator.create({
+            type: 'sticky',
+            x: 50 + Math.random() * 100,
+            y: 50 + Math.random() * 100,
+            w: 200,
+            h: 60,
+            text: noteText,
+            color: '#d48806',
+            status: 'pending',
+            module: moduleEl ? moduleEl.value : '',
+            priority: priorityEl ? priorityEl.value : 'medium',
+            requirementType: reqTypeEl ? reqTypeEl.value : 'functional',
+            pageId: currentPageId || null
+          });
+
+          // Render on canvas
+          var renderer = window.__CC && window.__CC.annotationRenderer;
+          if (renderer && ann) renderer.render(ann);
+
+          if (d && d.parentElement) d.parentElement.remove();
+          self._drawList();
+        }
+      }
+    ]);
+  };
+
+  // ---- v1.5: Import Notes ----
+
+  NotesAnnotationsTab.prototype._openImportDialog = function () {
+    var self = this;
+    var html = '<div class="cc-comp-form">' +
+      '<div class="cc-comp-row"><label>\u6570\u636E\u683C\u5F0F</label>' +
+      '<select class="cc-comp-input" id="cc-na-import-format">' +
+      '<option value="copilot">Copilot \u683C\u5F0F (\u6309\u9875\u9762)</option>' +
+      '<option value="flat">\u6241\u5E73\u6570\u7EC4</option>' +
+      '<option value="features">\u529F\u80FD\u5217\u8868</option></select></div>' +
+      '<div class="cc-comp-row"><label>JSON \u6570\u636E</label>' +
+      '<textarea class="cc-comp-input cc-comp-textarea" id="cc-na-import-data" rows="8" placeholder="\u7C98\u8D34 JSON \u6570\u636E..."></textarea></div>' +
+      '</div>';
+
+    var modal = window.CCModal;
+    if (!modal) return;
+
+    modal.show('\u5BFC\u5165\u5907\u6CE8', html, [
+      { text: '\u53D6\u6D88', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } },
+      {
+        text: '\u5BFC\u5165', cls: 'primary', fn: function (d) {
+          var formatEl = document.getElementById('cc-na-import-format');
+          var dataEl = document.getElementById('cc-na-import-data');
+          if (!dataEl || !dataEl.value.trim()) return;
+
+          var importer = window.__CC && window.__CC.annotationImporter;
+          if (!importer) {
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('\u6807\u6CE8\u5BFC\u5165\u6A21\u5757\u672A\u52A0\u8F7D', 'error');
+            return;
+          }
+
+          var fmt = formatEl ? formatEl.value : 'copilot';
+          var result;
+          try {
+            if (fmt === 'copilot') {
+              result = importer.importCopilotFormat(dataEl.value);
+            } else if (fmt === 'flat') {
+              result = importer.importFlatFormat(dataEl.value);
+            } else {
+              result = importer.importFeatureList(dataEl.value);
+            }
+
+            // Render imported annotations
+            var renderer = window.__CC && window.__CC.annotationRenderer;
+            if (renderer) {
+              var allAnns = self._state.get('annotations.list') || [];
+              for (var i = Math.max(0, allAnns.length - result.imported); i < allAnns.length; i++) {
+                renderer.render(allAnns[i]);
+              }
+            }
+
+            var msg = '\u5BFC\u5165\u5B8C\u6210: ' + result.imported + ' \u6761\u6210\u529F';
+            if (result.skipped > 0) msg += ', ' + result.skipped + ' \u6761\u8DF3\u8FC7';
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show(msg, 'success');
+            self._drawList();
+          } catch (e) {
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('\u5BFC\u5165\u5931\u8D25: ' + e.message, 'error');
+          }
+
+          if (d && d.parentElement) d.parentElement.remove();
+        }
+      }
+    ]);
+  };
+
+  // ---- v1.5: Export with Embedding into HTML ----
+
+  NotesAnnotationsTab.prototype._exportWithEmbed = function () {
+    var annotations = this._state.get('annotations.list') || [];
+    var canvasEl = this._state.canvas;
+    if (!canvasEl) return;
+
+    // Filter to current page annotations only
+    var currentPageId = this._state.get('annotations.currentPageId');
+    var pageAnns = currentPageId
+      ? annotations.filter(function (a) { return !a.pageId || a.pageId === currentPageId; })
+      : annotations;
+
+    if (pageAnns.length === 0) {
+      if (window.__CC && window.__CC.toast) window.__CC.toast.show('\u5F53\u524D\u9875\u9762\u65E0\u6807\u6CE8\u53EF\u5D4C\u5165', 'info');
+      return;
+    }
+
+    // Build annotation data block as HTML comment + script tag
+    var exporter = window.CCAnnotationExporter;
+    var copilotData = exporter ? new exporter().toCopilotFormat({ includeCoordinates: true }) : {};
+
+    // Build structured notes for embedding
+    var noteLines = [];
+    for (var i = 0; i < pageAnns.length; i++) {
+      var a = pageAnns[i];
+      var num = i + 1;
+      noteLines.push(num + '. ' + (a.text || '(空)'));
+      if (a.module) noteLines.push('   \u6A21\u5757: ' + a.module);
+      if (a.priority && a.priority !== 'medium') noteLines.push('   \u4F18\u5148\u7EA7: ' + a.priority);
+      if (a.requirementType) noteLines.push('   \u7C7B\u578B: ' + a.requirementType);
+      if (a.acceptanceCriteria) noteLines.push('   \u9A8C\u6536\u6807\u51C6: ' + a.acceptanceCriteria);
+    }
+
+    var notesBlock = '<!-- CollabCanvas Notes v1.5\n' +
+      '\u9875\u9762: ' + (currentPageId || '_unassigned') + '\n' +
+      '\u6807\u6CE8\u6570: ' + pageAnns.length + '\n' +
+      '-->\n' +
+      '<script type="application/json" id="cc-annotations-data">\n' +
+      JSON.stringify(pageAnns, null, 2) + '\n' +
+      '<\/script>';
+
+    // Clone canvas, strip editor artifacts, embed annotations
+    var exportEngine = window.__CC && window.__CC.exportEngine;
+    if (!exportEngine) return;
+
+    var clone = canvasEl.cloneNode(true);
+
+    // Remove editor-only elements
+    var EDITOR_SELECTORS = '.cc-resize-handle,.cc-rotate-handle,.cc-smart-guide,#cc-tooltip,.cc-annotation-overlay';
+    EDITOR_SELECTORS.split(',').forEach(function (sel) {
+      clone.querySelectorAll(sel).forEach(function (el) { el.remove(); });
+    });
+
+    var EDITOR_ARTIFACTS = ['cc-el-select', 'cc-el-hover', 'cc-el-multi', 'cc-inline-edit', 'cc-el'];
+    clone.querySelectorAll('*').forEach(function (el) {
+      EDITOR_ARTIFACTS.forEach(function (cls) { el.classList.remove(cls); });
+      el.removeAttribute('contenteditable');
+    });
+
+    // Append annotation data before closing body
+    var fullHtml = '<!DOCTYPE html>\n<html lang="en">\n<head>\n' +
+      '<meta charset="UTF-8">\n' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+      '<title>CollabCanvas Export</title>\n' +
+      '<style>\n' +
+      '  body { margin: 0; background: #f5f5f5; display: flex; justify-content: center; padding: 20px; }\n' +
+      '  .cc-canvas { position: relative; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.1); }\n' +
+      '</style>\n</head>\n<body>\n' +
+      clone.outerHTML + '\n' +
+      notesBlock + '\n' +
+      '</body>\n</html>';
+
+    // Download
+    var blob = new Blob([fullHtml], { type: 'text/html' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'collabcanvas-with-notes.html';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (window.__CC && window.__CC.toast) {
+      window.__CC.toast.show('\u5DF2\u5BFC\u51FA HTML (\u5D4C\u5165 ' + pageAnns.length + ' \u6761\u5907\u6CE8)', 'success');
+    }
   };
 
   NotesAnnotationsTab.prototype.destroy = function () {

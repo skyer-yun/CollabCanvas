@@ -1028,6 +1028,35 @@ body.cc-mode-annotate .cc-canvas::before {
   color: var(--cc-text-secondary); font-family: inherit; transition: all .12s;
 }
 .cc-na-export-btn:hover { border-color: var(--cc-primary); color: var(--cc-primary); }
+
+/* v1.5: Notes tab — title wrap with page tag */
+.cc-na-title-wrap { display: flex; align-items: center; gap: 4px; margin-right: auto; }
+.cc-na-page-tag {
+  display: inline-block; padding: 1px 6px; border-radius: 3px;
+  background: rgba(22,119,255,.1); color: var(--cc-primary);
+  font-size: 9px; font-weight: 500; max-width: 80px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* v1.5: Notes tab — action buttons */
+.cc-na-actions { display: flex; gap: 4px; }
+.cc-na-add-btn {
+  font-size: 10px; padding: 2px 8px; border: 1px solid var(--cc-primary);
+  border-radius: 3px; cursor: pointer; background: var(--cc-primary);
+  color: #fff; font-family: inherit; transition: all .12s;
+}
+.cc-na-add-btn:hover { opacity: .85; }
+.cc-na-import-btn,
+.cc-na-embed-btn {
+  font-size: 10px; padding: 2px 8px; border: 1px solid var(--cc-border);
+  border-radius: 3px; cursor: pointer; background: transparent;
+  color: var(--cc-text-secondary); font-family: inherit; transition: all .12s;
+}
+.cc-na-import-btn:hover,
+.cc-na-embed-btn:hover {
+  border-color: var(--cc-primary); color: var(--cc-primary);
+  background: rgba(22,119,255,.06);
+}
 .cc-na-filters {
   display: flex; gap: 4px; padding: 6px 10px;
   border-bottom: 1px solid var(--cc-border-light);

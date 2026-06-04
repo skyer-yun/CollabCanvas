@@ -1086,7 +1086,8 @@
         h: Math.round(h),
         text: text,
         color: defaultColor,
-        status: defaultStatus
+        status: defaultStatus,
+        pageId: appFacade.currentPage || null
       });
 
       // Render via annotation renderer for persistent display
