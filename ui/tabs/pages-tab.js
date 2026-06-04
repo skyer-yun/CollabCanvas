@@ -595,6 +595,7 @@
     bus.on('page:imported', function () { self.refresh(); });
     bus.on('page:toggled', function () { self.refresh(); });
     bus.on('page:moved', function () { self.refresh(); });
+    bus.on('pages:restored', function () { self.refresh(); });
   };
 
   // ── Refresh ────────────────────────────────────────────

@@ -230,6 +230,20 @@
       appFacade.pages = pages;
     }
 
+    // Save current canvas HTML back to the active page node (for persistence)
+    function _saveCurrentPageHtml() {
+      if (!appFacade.currentPage || !canvasEl) return;
+      var node = _findNode(appFacade.currentPage);
+      if (!node || node.type === 'folder') return;
+      node.html = canvasEl.innerHTML;
+      node.updatedAt = Date.now();
+    }
+
+    // Get current active page ID
+    function _getCurrentPageId() {
+      return appFacade.currentPage || null;
+    }
+
     function _loadPageToCanvas(page) {
       canvasEl.innerHTML = '';
       if (page.html) canvasEl.innerHTML = page.html;
@@ -1530,24 +1544,75 @@
         }
       });
 
+      // Restore pages (critical for annotation pageId filtering)
+      CCPersistence.load('pages', function(saved) {
+        if (saved && Array.isArray(saved.list) && saved.list.length > 0) {
+          state.set('pages.list', saved.list);
+        }
+        if (saved && typeof saved.current === 'number' && saved.current >= 0) {
+          state.set('pages.current', saved.current);
+        }
+        // Restore current page HTML if available
+        if (saved && saved.list && saved.list.length > 0) {
+          var currentPage = saved.list.filter(function(p) {
+            return p.id === saved.currentActiveId;
+          })[0];
+          if (currentPage && currentPage.html && state.canvas) {
+            state.canvas.innerHTML = currentPage.html;
+          }
+        }
+        bus.emit('pages:restored');
+      });
+
       // Debounced save on state changes
       CC._persistTimer = null;
+      CC._persistPagesTimer = null;
       bus.on('state:changed', function(ev) {
         // Support both single and batch change events
         var changes = ev.batch ? ev.changes : [ev];
         changes.forEach(function(change) {
-          // Only persist settings and annotations
-          if (change.path && (change.path.indexOf('settings.') === 0 || change.path === 'annotations.list')) {
+          if (!change.path) return;
+          // Persist settings
+          if (change.path.indexOf('settings.') === 0) {
             if (CC._persistTimer) clearTimeout(CC._persistTimer);
             CC._persistTimer = setTimeout(function() {
-              if (change.path.indexOf('settings.') === 0) {
-                CCPersistence.save('settings', state.get('settings'));
-              } else if (change.path === 'annotations.list') {
-                CCPersistence.save('annotations', state.get('annotations.list'));
-              }
+              CCPersistence.save('settings', state.get('settings'));
             }, 2000);
           }
+          // Persist annotations
+          if (change.path === 'annotations.list') {
+            CCPersistence.debounceSave('annotations', state.get('annotations.list'));
+          }
+          // Persist pages
+          if (change.path.indexOf('pages.') === 0) {
+            if (CC._persistPagesTimer) clearTimeout(CC._persistPagesTimer);
+            CC._persistPagesTimer = setTimeout(function() {
+              // Save current canvas HTML to active page before persisting
+              _saveCurrentPageHtml();
+              var pagesData = {
+                list: state.get('pages.list') || [],
+                current: state.get('pages.current') || 0,
+                currentActiveId: _getCurrentPageId()
+              };
+              CCPersistence.save('pages', pagesData);
+            }, 2000);
+          }
+          // Persist tokens
+          if (change.path.indexOf('tokens') === 0 || change.path === 'settings.activeDesignSystem') {
+            CCPersistence.debounceSave('tokens', {
+              tokens: state.get('tokens'),
+              activeDesignSystem: state.get('settings.activeDesignSystem')
+            });
+          }
         });
+      });
+
+      // Restore tokens
+      CCPersistence.load('tokens', function(saved) {
+        if (saved) {
+          if (saved.tokens) state.set('tokens', saved.tokens);
+          if (saved.activeDesignSystem) state.set('settings.activeDesignSystem', saved.activeDesignSystem);
+        }
       });
     }
 

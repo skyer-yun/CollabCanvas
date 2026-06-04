@@ -35,7 +35,9 @@
     this._container = null;
     this._activeCategory = 'colors';
     this._showPresets = false;
+    this._auditResult = null;
     this._onTokensChanged = this._onTokensChanged.bind(this);
+    this._onAuditResult = this._onAuditResult.bind(this);
   }
 
   /**
@@ -46,11 +48,17 @@
     this._container = container;
     if (this._bus) {
       this._bus.on('tokens:changed', this._onTokensChanged);
+      this._bus.on('design:audit-result', this._onAuditResult);
     }
     this._draw();
   };
 
   StylesTab.prototype._onTokensChanged = function() { this._draw(); };
+
+  StylesTab.prototype._onAuditResult = function(result) {
+    this._auditResult = result;
+    this._draw();
+  };
 
   StylesTab.prototype._draw = function() {
     if (!this._container) return;
@@ -72,6 +80,8 @@
     html += '<button class="cc-styles-import-btn" data-action="import">导入</button>';
     html += '<button class="cc-styles-export-btn" data-action="export">导出</button>';
     if (activeDS) {
+      html += '<button class="cc-styles-audit-btn" data-action="audit">审计</button>';
+      html += '<button class="cc-styles-detect-btn" data-action="detect">检测</button>';
       html += '<button class="cc-styles-clear-btn" data-action="clear">清除</button>';
     }
     html += '</div></div>';
@@ -132,6 +142,55 @@
         html += '</div>';
       }
       html += '</div>';
+      html += '</div>';
+    }
+
+    // Audit results panel
+    if (this._auditResult) {
+      html += '<div class="cc-styles-audit-panel">';
+      var ar = this._auditResult;
+      var sum = ar.summary || {};
+      html += '<div class="cc-styles-audit-header">';
+      html += '<span>设计审计报告</span>';
+      html += '<button class="cc-styles-audit-close" data-action="close-audit">&times;</button>';
+      html += '</div>';
+      if (sum.error) {
+        html += '<div class="cc-styles-audit-error">' + this._escapeHtml(sum.error) + '</div>';
+      } else {
+        html += '<div class="cc-styles-audit-summary">';
+        html += '<div class="cc-styles-audit-stat"><strong>' + (sum.totalDeviations || 0) + '</strong> 处偏差</div>';
+        html += '<div class="cc-styles-audit-stat">合规度 <strong>' + (sum.compliance || 0) + '%</strong></div>';
+        if (sum.byProperty) {
+          for (var prop in sum.byProperty) {
+            if (sum.byProperty.hasOwnProperty(prop)) {
+              html += '<div class="cc-styles-audit-prop">' + this._escapeHtml(prop) + ': ' + sum.byProperty[prop] + '</div>';
+            }
+          }
+        }
+        html += '</div>';
+        // Deviation list
+        if (ar.deviations && ar.deviations.length > 0) {
+          html += '<div class="cc-styles-audit-deviations">';
+          for (var di = 0; di < Math.min(ar.deviations.length, 30); di++) {
+            var dev = ar.deviations[di];
+            html += '<div class="cc-styles-audit-dev ' + (dev.severity || 'info') + '">';
+            html += '<div class="cc-styles-audit-dev-el">' + this._escapeHtml(dev.element) + '</div>';
+            html += '<div class="cc-styles-audit-dev-detail">';
+            html += '<span class="cc-styles-audit-dev-prop">' + this._escapeHtml(dev.property) + '</span>: ';
+            html += '<span class="cc-styles-audit-dev-val">' + this._escapeHtml(dev.value) + '</span>';
+            if (dev.suggestion) {
+              html += ' <span class="cc-styles-audit-dev-sug">→ ' + this._escapeHtml(dev.suggestion) + '</span>';
+            }
+            html += '</div></div>';
+          }
+          if (ar.deviations.length > 30) {
+            html += '<div class="cc-styles-audit-more">... 还有 ' + (ar.deviations.length - 30) + ' 处偏差</div>';
+          }
+          html += '</div>';
+        } else {
+          html += '<div class="cc-styles-audit-clean">全部合规，未发现偏差</div>';
+        }
+      }
       html += '</div>';
     }
 
@@ -301,6 +360,34 @@
         if (self._bus) self._bus.emit('token:clear', {});
       });
     }
+
+    // v1.6: Audit button
+    var auditBtn = this._container.querySelector('[data-action="audit"]');
+    if (auditBtn) {
+      auditBtn.addEventListener('click', function() {
+        if (self._bus) self._bus.emit('design:audit', { scope: 'all' });
+      });
+    }
+
+    // v1.6: Detect design system button
+    var detectBtn = this._container.querySelector('[data-action="detect"]');
+    if (detectBtn) {
+      detectBtn.addEventListener('click', function() {
+        var canvas = self._state.canvas;
+        if (canvas && self._bus) {
+          self._bus.emit('design:detect-system', canvas.innerHTML);
+        }
+      });
+    }
+
+    // Close audit panel
+    var closeAuditBtn = this._container.querySelector('[data-action="close-audit"]');
+    if (closeAuditBtn) {
+      closeAuditBtn.addEventListener('click', function() {
+        self._auditResult = null;
+        self._draw();
+      });
+    }
   };
 
   StylesTab.prototype._escapeHtml = function(str) {
@@ -319,6 +406,7 @@
   StylesTab.prototype.destroy = function() {
     if (this._bus) {
       this._bus.off('tokens:changed', this._onTokensChanged);
+      this._bus.off('design:audit-result', this._onAuditResult);
     }
     this._container = null;
   };
