@@ -1,12 +1,12 @@
 /**
  * CollabCanvas — Annotation Tools
- * 7 annotation tools: arrow, rect, text, measure, sticky, number, brush
+ * 9 annotation tools: arrow, rect, text, measure, sticky, number, brush, mosaic, region
  * SVG overlay rendering with pointer events
  */
 (function() {
   'use strict';
 
-  var TOOLS = ['arrow', 'rect', 'text', 'measure', 'sticky', 'number', 'brush', 'mosaic'];
+  var TOOLS = ['arrow', 'rect', 'text', 'measure', 'sticky', 'number', 'brush', 'mosaic', 'region'];
 
   function AnnotationTools(state, eventBus) {
     this._state = state;
@@ -91,6 +91,7 @@
       case 'number':  this._startNumber(pt); break;
       case 'brush':   this._startBrush(pt); break;
       case 'mosaic':  this._startMosaic(pt); break;
+      case 'region':  this._startRegion(pt); break;
     }
   };
 
@@ -104,6 +105,7 @@
       case 'measure': this._moveMeasure(pt); break;
       case 'brush':   this._moveBrush(pt); break;
       case 'mosaic':  this._moveMosaic(pt); break;
+      case 'region':  this._moveRegion(pt); break;
     }
   };
 
@@ -119,6 +121,7 @@
       case 'measure': this._endMeasure(pt); break;
       case 'brush':   this._endBrush(pt); break;
       case 'mosaic':  this._endMosaic(pt); break;
+      case 'region':  this._endRegion(pt); break;
     }
 
     if (this._bus && this._currentEl) {
@@ -517,6 +520,37 @@
     } catch (e) {
       // Cross-origin or other error: keep random mosaic
     }
+  };
+
+  // ---- Region tool (drag-to-create dashed rect with label) ----
+
+  AnnotationTools.prototype._startRegion = function(pt) {
+    var g = this._svgEl('g', { 'class': 'cc-ann-region' });
+    var rect = this._svgEl('rect', {
+      x: pt.x, y: pt.y, width: 0, height: 0,
+      fill: 'rgba(114,46,209,0.08)', stroke: '#722ed1', 'stroke-width': 2, 'stroke-dasharray': '6,3', rx: 6
+    });
+    g.appendChild(rect);
+    this.getOverlay().appendChild(g);
+    this._currentEl = g;
+  };
+
+  AnnotationTools.prototype._moveRegion = function(pt) {
+    if (!this._currentEl) return;
+    var rect = this._currentEl.querySelector('rect');
+    if (!rect) return;
+    var x = Math.min(this._startX, pt.x);
+    var y = Math.min(this._startY, pt.y);
+    var w = Math.abs(pt.x - this._startX);
+    var h = Math.abs(pt.y - this._startY);
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', w);
+    rect.setAttribute('height', h);
+  };
+
+  AnnotationTools.prototype._endRegion = function() {
+    // Region stays as-is; user can add label via annotation edit
   };
 
   // Export

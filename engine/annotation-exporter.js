@@ -6,7 +6,9 @@
 ;(function () {
   'use strict';
 
-  function AnnotationExporter() {}
+  function AnnotationExporter(state) {
+    this._state = state || null;
+  }
 
   /**
    * Build structured annotation data with full context.
@@ -39,7 +41,9 @@
         priority: ann.priority || 'medium',
         requirementType: ann.requirementType || 'functional',
         acceptanceCriteria: ann.acceptanceCriteria || '',
-        requirementId: ann.requirementId || ''
+        requirementId: ann.requirementId || '',
+        pageId: ann.pageId || null,
+        target: ann.target || null
       };
       items.push(item);
     }
@@ -334,7 +338,9 @@
    * @returns {Object}
    */
   AnnotationExporter.prototype.toCopilotFormat = function (options) {
-    var data = this._buildStructuredData();
+    var annotations = this._state ? (this._state.get('annotations.list') || []) : [];
+    var canvasEl = this._state ? this._state.canvas : null;
+    var data = this.buildStructuredData(annotations, canvasEl);
     var opts = options || {};
     var result = {};
 

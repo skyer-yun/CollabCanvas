@@ -142,8 +142,8 @@
 
   SettingsDialog.prototype._defaults = function () {
     return {
-      project: { name: '', version: '1.0', author: '', description: '', pageUrl: '' },
-      ai: { provider: 'none', apiKey: '', endpoint: '', model: '' },
+      project: { name: '', version: '1.0', author: '', description: '', pageUrl: '', designSystem: '', framework: '', featureSummary: '' },
+      ai: { provider: 'none', apiKey: '', endpoint: '', model: '', systemPromptExtra: '' },
       export: { format: 'markdown', includeScreenshots: true, includeAnnotations: true, annotationNumberFormat: 'auto' },
       annotations: { autoNumber: true, defaultColor: '#1677ff', defaultStatus: 'pending', showCoordinates: true, showPRDIndicators: true, defaultModule: '', defaultPriority: 'medium', defaultRequirementType: 'functional' }
     };

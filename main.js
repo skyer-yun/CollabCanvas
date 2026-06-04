@@ -163,7 +163,7 @@
       if (tokenImporter) tokenImporter._designSystems = designSystems;
     }
 
-    // v1.5: Annotation Importer + Design Audit
+    // v1.5: Annotation Importer + Design Audit + Exporter with state
     var annotationImporter = null;
     if (typeof CCAnnotationImporter !== 'undefined') {
       annotationImporter = CC.annotationImporter = new CCAnnotationImporter(state, bus);
@@ -171,6 +171,9 @@
     var designAudit = null;
     if (typeof CCDesignAudit !== 'undefined') {
       designAudit = CC.designAudit = new CCDesignAudit(state, bus);
+    }
+    if (typeof CCAnnotationExporter !== 'undefined') {
+      CC.annotationExporter = new CCAnnotationExporter(state);
     }
 
     // Version system instances
@@ -1070,7 +1073,7 @@
       var toolColors = {
         'arrow': '#ff4d4f', 'rect': '#1677ff', 'text': '#1f1f1f',
         'measure': '#faad14', 'sticky': '#d48806', 'number': '#1677ff',
-        'brush': '#ff4d4f', 'mosaic': '#8c8c8c'
+        'brush': '#ff4d4f', 'mosaic': '#8c8c8c', 'region': '#722ed1'
       };
 
       // Read default color/status from settings

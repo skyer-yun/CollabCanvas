@@ -81,6 +81,9 @@
       case 'mosaic':
         el = this._renderMosaic(ann);
         break;
+      case 'region':
+        el = this._renderRegion(ann);
+        break;
       default:
         el = this._renderRect(ann);
     }
@@ -313,6 +316,30 @@
       fill: 'none', stroke: '#ff4d4f', 'stroke-width': 1, 'stroke-dasharray': '3,2', rx: 2
     });
     g.appendChild(border);
+    return g;
+  };
+
+  AnnotationRenderer.prototype._renderRegion = function(ann) {
+    var g = this._svgEl('g', {});
+    var r = this._svgEl('rect', {
+      x: ann.x, y: ann.y, width: ann.w || 200, height: ann.h || 120,
+      fill: this._hexToRGBA(ann.color || '#722ed1', 0.08),
+      stroke: ann.color || '#722ed1', 'stroke-width': 2, 'stroke-dasharray': '6,3', rx: 6
+    });
+    g.appendChild(r);
+    if (ann.text) {
+      var bg = this._svgEl('rect', {
+        x: ann.x + 2, y: ann.y - 18, width: Math.min(ann.text.length * 9 + 12, (ann.w || 200) - 4), height: 18,
+        fill: ann.color || '#722ed1', rx: 3
+      });
+      g.appendChild(bg);
+      var t = this._svgEl('text', {
+        x: ann.x + 8, y: ann.y - 4, 'font-size': 12,
+        fill: '#fff', 'font-weight': '500'
+      });
+      t.textContent = ann.text;
+      g.appendChild(t);
+    }
     return g;
   };
 

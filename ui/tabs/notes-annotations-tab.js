@@ -776,8 +776,8 @@
     }
 
     // Build annotation data block as HTML comment + script tag
-    var exporter = window.CCAnnotationExporter;
-    var copilotData = exporter ? new exporter().toCopilotFormat({ includeCoordinates: true }) : {};
+    var exporterInstance = window.__CC && window.__CC.annotationExporter;
+    var copilotData = exporterInstance ? exporterInstance.toCopilotFormat({ includeCoordinates: true }) : {};
 
     // Build structured notes for embedding
     var noteLines = [];

@@ -390,7 +390,7 @@
     var TYPE_LABELS = {
       'arrow': '\u7BAD\u5934', 'rect': '\u77E9\u5F62', 'text': '\u6587\u5B57',
       'measure': '\u6D4B\u91CF', 'sticky': '\u4FBF\u7B7E', 'number': '\u7F16\u53F7',
-      'brush': '\u753B\u7B14', 'mosaic': '\u9A6C\u8D5B\u514B'
+      'brush': '\u753B\u7B14', 'mosaic': '\u9A6C\u8D5B\u514B', 'region': '\u533A\u57DF'
     };
     var typeLabel = TYPE_LABELS[ann.type] || ann.type;
 
