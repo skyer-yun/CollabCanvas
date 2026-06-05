@@ -130,16 +130,16 @@
     kb.register('0', 'keyboard:zoom-reset', { ctrl: true });
 
     // nudge (arrow keys)
-    kb.register('arrowup', 'keyboard:nudge-up', { modes: ['edit', 'annotate'] });
-    kb.register('arrowdown', 'keyboard:nudge-down', { modes: ['edit', 'annotate'] });
-    kb.register('arrowleft', 'keyboard:nudge-left', { modes: ['edit', 'annotate'] });
-    kb.register('arrowright', 'keyboard:nudge-right', { modes: ['edit', 'annotate'] });
+    kb.register('arrowup', 'keyboard:nudge-up', { modes: ['edit'] });
+    kb.register('arrowdown', 'keyboard:nudge-down', { modes: ['edit'] });
+    kb.register('arrowleft', 'keyboard:nudge-left', { modes: ['edit'] });
+    kb.register('arrowright', 'keyboard:nudge-right', { modes: ['edit'] });
 
     // shift+nudge (10px) — shift flag is checked during dispatch
-    kb.register('arrowup', 'keyboard:nudge-up-10', { shift: true, modes: ['edit', 'annotate'] });
-    kb.register('arrowdown', 'keyboard:nudge-down-10', { shift: true, modes: ['edit', 'annotate'] });
-    kb.register('arrowleft', 'keyboard:nudge-left-10', { shift: true, modes: ['edit', 'annotate'] });
-    kb.register('arrowright', 'keyboard:nudge-right-10', { shift: true, modes: ['edit', 'annotate'] });
+    kb.register('arrowup', 'keyboard:nudge-up-10', { shift: true, modes: ['edit'] });
+    kb.register('arrowdown', 'keyboard:nudge-down-10', { shift: true, modes: ['edit'] });
+    kb.register('arrowleft', 'keyboard:nudge-left-10', { shift: true, modes: ['edit'] });
+    kb.register('arrowright', 'keyboard:nudge-right-10', { shift: true, modes: ['edit'] });
 
     // delete / escape / help
     kb.register('delete', 'keyboard:delete', { modes: ['edit'] });

@@ -1,6 +1,6 @@
 ;(function () {
-  var TABS = ['layers', 'components', 'annotations', 'pages'];
-  var LABELS = { layers: '图层', components: '组件', annotations: '标注', pages: '页面' };
+  var TABS = ['layers', 'components', 'pages'];
+  var LABELS = { layers: '\u56FE\u5C42', components: '\u7EC4\u4EF6', pages: '\u9875\u9762' };
 
   function LeftPanel(state, bus) {
     this.state = state;

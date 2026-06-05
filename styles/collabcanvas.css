@@ -26,7 +26,7 @@
   --cc-error: #ff4d4f;
   --cc-toolbar-h: 42px;
   --cc-statusbar-h: 28px;
-  --cc-left-panel-w: 240px;
+  --cc-left-panel-w: 220px;
   --cc-right-panel-w: 320px;
   --cc-radius-sm: 4px;
   --cc-radius-md: 6px;
@@ -161,6 +161,97 @@ body.cc-active { cursor: default !important; overflow: hidden !important; }
   -webkit-text-fill-color: #fff;
 }
 
+/* ===== Annotation Toggle Button ===== */
+.cc-btn-ann-toggle {
+  padding: 2px 10px !important;
+  font-size: 12px !important;
+  color: var(--cc-text-secondary) !important;
+  background: var(--cc-bg) !important;
+  border: 1px solid var(--cc-border) !important;
+  border-radius: var(--cc-radius-sm) !important;
+  transition: all .15s;
+}
+.cc-btn-ann-toggle:hover:not(:disabled) {
+  color: var(--cc-primary) !important;
+  border-color: var(--cc-primary) !important;
+}
+.cc-btn-ann-toggle.active {
+  color: #fff !important;
+  background: var(--cc-primary) !important;
+  border-color: var(--cc-primary) !important;
+}
+.cc-btn-ann-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ===== Toolbar Annotation Sub-bar ===== */
+.cc-toolbar-annotate-bar {
+  height: 34px; flex-shrink: 0;
+  background: var(--cc-bg-secondary);
+  border-bottom: 1px solid var(--cc-border);
+  display: flex; align-items: center; padding: 0 12px; gap: 3px;
+}
+
+.cc-ann-tool-btn {
+  width: 28px !important; height: 26px !important; padding: 0 !important;
+  border: 1px solid var(--cc-border) !important; border-radius: 4px !important;
+  font-size: 13px !important; background: var(--cc-bg) !important;
+  color: var(--cc-text-secondary) !important; text-align: center; line-height: 1;
+  transition: all .15s;
+}
+.cc-ann-tool-btn:hover {
+  border-color: var(--cc-primary) !important; color: var(--cc-primary) !important;
+}
+.cc-ann-tool-btn.active {
+  background: var(--cc-primary) !important; color: #fff !important;
+  border-color: var(--cc-primary) !important;
+}
+
+.cc-ann-display-btn {
+  font-size: 11px !important; padding: 0 8px !important;
+  border: 1px solid var(--cc-border) !important; border-radius: 4px !important;
+  background: var(--cc-bg) !important; color: var(--cc-text-secondary) !important;
+}
+.cc-ann-display-btn:hover { border-color: var(--cc-primary) !important; }
+.cc-ann-display-btn.active {
+  background: var(--cc-primary-bg) !important; color: var(--cc-primary) !important;
+  border-color: var(--cc-primary) !important;
+}
+
+/* ===== Toolbar Dropdown Menu ===== */
+.cc-dropdown-wrap { position: relative; }
+.cc-dropdown {
+  position: absolute; top: 100%; left: 0; margin-top: 4px;
+  background: var(--cc-bg); border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-md); box-shadow: var(--cc-shadow-md);
+  min-width: 140px; z-index: 100010; overflow: hidden;
+}
+.cc-dropdown-item {
+  padding: 7px 14px; font-size: 12px; color: var(--cc-text);
+  cursor: pointer; transition: background .1s; white-space: nowrap;
+}
+.cc-dropdown-item:hover { background: var(--cc-primary-bg); color: var(--cc-primary); }
+.cc-dropdown-sep { height: 1px; background: var(--cc-border-light); margin: 4px 0; }
+
+/* ===== Pause Overlay ===== */
+.cc-pause-overlay {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 8px 16px; text-align: center;
+  background: rgba(250,173,20,0.9); color: #fff;
+  font-size: 13px; font-weight: 600; z-index: 99997;
+  letter-spacing: .5px;
+}
+
+/* ===== Panel Resize Handle ===== */
+.cc-panel-resize {
+  position: absolute; top: 0; width: 5px; height: 100%;
+  cursor: col-resize; z-index: 99999; transition: background .15s;
+}
+.cc-panel-resize:hover { background: var(--cc-primary); opacity: .3; }
+.cc-panel-resize-left { right: -3px; }
+.cc-panel-resize-right { left: -3px; }
+
 /* ===== Body area ===== */
 .cc-body { flex: 1; display: flex; overflow: hidden; position: relative; }
 
@@ -272,16 +363,21 @@ body.cc-active { cursor: default !important; overflow: hidden !important; }
 body.cc-placing { cursor: crosshair !important; }
 body.cc-placing .cc-viewport { cursor: crosshair !important; }
 
-/* ===== Toast ===== */
-.cc-toast {
+/* ===== Toast Container ===== */
+.cc-toast-container {
   position: fixed; top: 50px; left: 50%; transform: translateX(-50%);
-  z-index: 100001; padding: 6px 18px; border-radius: var(--cc-radius-md);
+  z-index: 100001; display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none; align-items: center;
+}
+.cc-toast {
+  padding: 6px 18px; border-radius: var(--cc-radius-md);
   font-size: 13px; color: #fff;
   font-family: inherit; box-shadow: var(--cc-shadow-md);
   transition: opacity .3s; pointer-events: none;
 }
 .cc-toast.info { background: var(--cc-primary); }
 .cc-toast.success { background: var(--cc-success); }
+.cc-toast.error { background: var(--cc-error); }
 .cc-toast.cc-toast-fade { opacity: 0; }
 
 /* ===== Dialog / Overlay ===== */
@@ -573,8 +669,6 @@ body.cc-placing .cc-viewport { cursor: crosshair !important; }
 body.cc-mode-preview .cc-canvas { pointer-events: none; }
 body.cc-mode-preview .cc-el { cursor: default !important; }
 body.cc-mode-edit .cc-canvas { pointer-events: auto; }
-body.cc-mode-annotate .cc-canvas { pointer-events: none; }
-body.cc-mode-annotate .cc-annotation-overlay { pointer-events: auto; }
 
 /* ===== Mosaic Annotation ===== */
 .cc-ann-mosaic canvas { image-rendering: pixelated; image-rendering: -moz-crisp-edges; }
@@ -762,10 +856,7 @@ body.cc-mode-annotate .cc-annotation-overlay { pointer-events: auto; }
 .cc-annotation-overlay .cc-ann-measure line { filter: drop-shadow(0 1px 2px rgba(250,173,20,.25)); }
 .cc-annotation-overlay .cc-ann-brush path { filter: drop-shadow(0 1px 2px rgba(255,77,79,.25)); }
 
-/* -- Annotate mode canvas overlay tint -- */
-body.cc-mode-annotate .cc-canvas::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(22, 119, 255, 0.03); pointer-events: none; z-index: 9;
+/* ===== Mosaic Annotation ===== */
 }
 
 /* ===== Styles Tab ===== */
@@ -1148,6 +1239,13 @@ body.cc-mode-annotate .cc-canvas::before {
 }
 .cc-na-tag-comp {
   background: #f6ffed; color: #52c41a;
+}
+.cc-na-tag-target {
+  background: #fff7e6; color: #d48806;
+  font-style: italic;
+}
+.cc-na-sel-filter {
+  padding: 2px 0;
 }
 .cc-na-coord {
   font-size: 9px; color: var(--cc-text-tertiary);

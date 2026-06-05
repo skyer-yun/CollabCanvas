@@ -253,10 +253,17 @@
     div.style.cssText = 'position:absolute;left:' + pt.x + 'px;top:' + pt.y +
       'px;min-width:80px;min-height:28px;padding:6px 10px;font-size:14px;' +
       'color:#1f1f1f;background:rgba(255,255,255,0.95);border:2px solid #8c8c8c;' +
-      'border-radius:4px;outline:none;z-index:20;white-space:pre-wrap;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+      'border-radius:4px;outline:none;z-index:20;white-space:pre-wrap;box-shadow:0 2px 8px rgba(0,0,0,0.15);' +
+      'opacity:0;transform:scale(0.95);transition:opacity .2s,transform .2s;';
     var svg = this.getOverlay();
     svg.parentNode.appendChild(div);
     div.focus();
+
+    // Fade in animation
+    requestAnimationFrame(function() {
+      div.style.opacity = '1';
+      div.style.transform = 'scale(1)';
+    });
     this._currentEl = div;
 
     var self = this;
@@ -345,12 +352,19 @@
       'px;width:180px;min-height:100px;padding:14px;font-size:14px;' +
       'background:#fffbe6;border:2px solid #ffe58f;border-radius:6px;' +
       'box-shadow:0 3px 12px rgba(0,0,0,0.15);z-index:20;outline:none;' +
-      'color:#1f1f1f;word-wrap:break-word;';
+      'color:#1f1f1f;word-wrap:break-word;' +
+      'opacity:0;transform:scale(0.95);transition:opacity .2s,transform .2s;';
     div.contentEditable = true;
-    div.textContent = '备注...';
+    div.textContent = '\u5907\u6CE8...';
     var svg = this.getOverlay();
     svg.parentNode.appendChild(div);
     div.focus();
+
+    // Fade in animation
+    requestAnimationFrame(function() {
+      div.style.opacity = '1';
+      div.style.transform = 'scale(1)';
+    });
 
     // Select all text on first focus
     var range = document.createRange();

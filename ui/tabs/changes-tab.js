@@ -403,14 +403,23 @@
           var ta = dialog.querySelector('#cc-ai-code-result');
           if (!ta) return;
           var cssText = ta.value;
-          // Try to extract CSS rules and apply them
           var selectedEl = window.__CC && window.__CC.state && window.__CC.state.selected;
           if (selectedEl && cssText) {
-            var style = selectedEl.getAttribute('style') || '';
-            selectedEl.setAttribute('style', style + ';' + cssText);
-            if (window.__CC && window.__CC.toast) window.__CC.toast.show('CSS 已应用到选中元素', 'success');
+            // Parse CSS declarations properly instead of raw append
+            var declarations = cssText.split(';').map(function (d) { return d.trim(); }).filter(function (d) { return d.indexOf(':') > 0; });
+            declarations.forEach(function (decl) {
+              var colonIdx = decl.indexOf(':');
+              var prop = decl.substring(0, colonIdx).trim();
+              var val = decl.substring(colonIdx + 1).trim();
+              if (prop && val) {
+                // Convert CSS property name to JS camelCase
+                var jsProp = prop.replace(/-([a-z])/g, function (m, c) { return c.toUpperCase(); });
+                try { selectedEl.style[jsProp] = val; } catch (e) { /* skip invalid */ }
+              }
+            });
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('CSS \u5DF2\u5E94\u7528\u5230\u9009\u4E2D\u5143\u7D20', 'success');
           } else {
-            if (window.__CC && window.__CC.toast) window.__CC.toast.show('请先选中一个元素再应用', 'info');
+            if (window.__CC && window.__CC.toast) window.__CC.toast.show('\u8BF7\u5148\u9009\u4E2D\u4E00\u4E2A\u5143\u7D20\u518D\u5E94\u7528', 'info');
           }
         });
       }

@@ -28,12 +28,12 @@
   // Icon map for common tags
   var TAG_ICONS = {
     'div': '\u25A1', 'h1': 'H', 'h2': 'H', 'h3': 'H', 'p': '\u00B6',
-    'img': '\u{1F5BC}', 'a': '\u{1F517}', 'button': '\u25A7', 'table': '\u229E',
-    'ul': '\u2630', 'span': 'T', 'section': '\u25A1', 'group': '\u{1F4E6}',
-    'hotspot': '\u{1F4CD}', 'image': '\u{1F5BC}', '区块': '\u25A1',
-    '标题': 'H', '段落': '\u00B6', '图片': '\u{1F5BC}', '链接': '\u{1F517}',
+    'img': '\u25A2', 'a': '\u2295', 'button': '\u25A7', 'table': '\u229E',
+    'ul': '\u2630', 'span': 'T', 'section': '\u25A1', 'group': '\u229E',
+    'hotspot': '\u25C6', 'image': '\u25A2', '区块': '\u25A1',
+    '标题': 'H', '段落': '\u00B6', '图片': '\u25A2', '链接': '\u2295',
     '按钮': '\u25A7', '表格': '\u229E', '列表': '\u2630', '文本': 'T',
-    '分组': '\u{1F4E6}', '热区': '\u{1F4CD}'
+    '分组': '\u229E', '热区': '\u25C6'
   };
 
   function LayersTab(state, bus) {
@@ -135,7 +135,7 @@
     var lock = document.createElement('span');
     var isLocked = el.getAttribute('data-locked') === 'true';
     lock.className = 'cc-layer-lock' + (isLocked ? ' cc-layer-locked' : '');
-    lock.textContent = isLocked ? '\u{1F512}' : '\u{1F513}';
+    lock.textContent = isLocked ? '\u2261' : '\u2262';
     lock.title = '切换锁定';
     lock.addEventListener('click', function (e) {
       e.stopPropagation();

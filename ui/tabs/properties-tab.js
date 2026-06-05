@@ -235,7 +235,7 @@
       emitChange('textAlign', old, v);
     }));
 
-    typoBody.appendChild(propSelectRow('行高', [
+    typoBody.appendChild(propSelectRow('\u884C\u9AD8', [
       '1', '1.2', '1.4', '1.5', '1.6', '1.8', '2'
     ], cs.lineHeight, function (v) {
       var old = el.style.lineHeight;
@@ -243,13 +243,7 @@
       emitChange('lineHeight', old, v);
     }));
 
-    typoBody.appendChild(propColorRow('颜色', cs.color, function (hex) {
-      var old = el.style.color;
-      el.style.color = hex;
-      emitChange('color', old, hex);
-    }));
-
-    container.appendChild(groupSection('排版', typoBody, true));
+    container.appendChild(groupSection('\u6392\u7248', typoBody, true));
 
     // 3. Spacing
     var spacingBody = document.createElement('div');
@@ -268,16 +262,22 @@
     });
     container.appendChild(groupSection('间距', spacingBody, true));
 
-    // 4. Appearance
+    // 4. Appearance (includes background)
     var appearBody = document.createElement('div');
 
-    appearBody.appendChild(propColorRow('背景色', cs.backgroundColor, function (hex) {
+    appearBody.appendChild(propColorRow('\u80CC\u666F\u8272', cs.backgroundColor, function (hex) {
       var old = el.style.backgroundColor;
       el.style.backgroundColor = hex;
       emitChange('backgroundColor', old, hex);
     }));
 
-    appearBody.appendChild(propSelectRow('透明度', [
+    appearBody.appendChild(propColorRow('\u6587\u5B57\u8272', cs.color, function (hex) {
+      var old = el.style.color;
+      el.style.color = hex;
+      emitChange('color', old, hex);
+    }));
+
+    appearBody.appendChild(propSelectRow('\u900F\u660E\u5EA6', [
       '1', '0.9', '0.8', '0.7', '0.6', '0.5', '0.4', '0.3', '0.2', '0.1', '0'
     ], cs.opacity, function (v) {
       var old = el.style.opacity;
@@ -285,7 +285,7 @@
       emitChange('opacity', old, v);
     }));
 
-    appearBody.appendChild(propSelectRow('溢出', [
+    appearBody.appendChild(propSelectRow('\u6EA2\u51FA', [
       'visible', 'hidden', 'auto', 'scroll'
     ], cs.overflow, function (v) {
       var old = el.style.overflow;
@@ -293,7 +293,7 @@
       emitChange('overflow', old, v);
     }));
 
-    appearBody.appendChild(propSelectRow('光标', [
+    appearBody.appendChild(propSelectRow('\u5149\u6807', [
       'auto', 'default', 'pointer', 'move', 'text', 'not-allowed', 'grab', 'crosshair'
     ], cs.cursor, function (v) {
       var old = el.style.cursor;
@@ -301,7 +301,27 @@
       emitChange('cursor', old, v);
     }));
 
-    container.appendChild(groupSection('外观', appearBody, true));
+    var bgImg = document.createElement('input');
+    bgImg.type = 'text';
+    bgImg.className = 'cc-prop-text';
+    bgImg.value = cs.backgroundImage !== 'none' ? cs.backgroundImage : '';
+    bgImg.placeholder = 'url(...)';
+    bgImg.addEventListener('change', function () {
+      var old = el.style.backgroundImage;
+      el.style.backgroundImage = bgImg.value || 'none';
+      emitChange('backgroundImage', old, el.style.backgroundImage);
+    });
+    appearBody.appendChild(propRow('\u80CC\u666F\u56FE', bgImg));
+
+    appearBody.appendChild(propSelectRow('\u80CC\u666F\u5C3A\u5BF8', [
+      'auto', 'cover', 'contain'
+    ], cs.backgroundSize, function (v) {
+      var old = el.style.backgroundSize;
+      el.style.backgroundSize = v;
+      emitChange('backgroundSize', old, v);
+    }));
+
+    container.appendChild(groupSection('\u5916\u89C2', appearBody, true));
 
     // 5. Layout
     var layoutBody = document.createElement('div');
@@ -472,55 +492,7 @@
     });
     borderBody.appendChild(propRow('圆角', brInput));
 
-    container.appendChild(groupSection('边框', borderBody, true));
-
-    // 9. Background
-    var bgBody = document.createElement('div');
-
-    bgBody.appendChild(propColorRow('颜色', cs.backgroundColor, function (hex) {
-      var old = el.style.backgroundColor;
-      el.style.backgroundColor = hex;
-      emitChange('backgroundColor', old, hex);
-    }));
-
-    var bgImg = document.createElement('input');
-    bgImg.type = 'text';
-    bgImg.className = 'cc-prop-text';
-    bgImg.value = cs.backgroundImage !== 'none' ? cs.backgroundImage : '';
-    bgImg.placeholder = 'url(...)';
-    bgImg.addEventListener('change', function () {
-      var old = el.style.backgroundImage;
-      el.style.backgroundImage = bgImg.value || 'none';
-      emitChange('backgroundImage', old, el.style.backgroundImage);
-    });
-    bgBody.appendChild(propRow('背景图', bgImg));
-
-    bgBody.appendChild(propSelectRow('尺寸', [
-      'auto', 'cover', 'contain'
-    ], cs.backgroundSize, function (v) {
-      var old = el.style.backgroundSize;
-      el.style.backgroundSize = v;
-      emitChange('backgroundSize', old, v);
-    }));
-
-    bgBody.appendChild(propSelectRow('位置', [
-      'center', 'top', 'bottom', 'left', 'right', 'top left', 'top right',
-      'bottom left', 'bottom right'
-    ], cs.backgroundPosition, function (v) {
-      var old = el.style.backgroundPosition;
-      el.style.backgroundPosition = v;
-      emitChange('backgroundPosition', old, v);
-    }));
-
-    bgBody.appendChild(propSelectRow('重复', [
-      'repeat', 'no-repeat', 'repeat-x', 'repeat-y', 'space', 'round'
-    ], cs.backgroundRepeat, function (v) {
-      var old = el.style.backgroundRepeat;
-      el.style.backgroundRepeat = v;
-      emitChange('backgroundRepeat', old, v);
-    }));
-
-    container.appendChild(groupSection('背景', bgBody, true));
+    container.appendChild(groupSection('\u8FB9\u6846', borderBody, true));
   };
 
   PropertiesTab.prototype.destroy = function () {

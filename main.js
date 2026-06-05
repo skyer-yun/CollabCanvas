@@ -61,13 +61,17 @@
     // ==================== Setup DOM ====================
     // Build shell (returns {root, toolbar, leftPanel, viewport, canvas, rightPanel, statusbar})
     var shellResult = shell.create();
-    var toolbarEl = toolbar.create();
+    var toolbarResult = toolbar.create();
+    var toolbarEl = toolbarResult.toolbar;
+    var annBarEl = toolbarResult.annBar;
     var leftResult = leftPanel.create();
     var rightResult = rightPanel.create();
     var statusbarEl = statusbar.create();
 
     // Assemble layout: replace shell placeholder elements with actual UI components
     shellResult.toolbar.replaceWith(toolbarEl);
+    // Insert annotation sub-bar after toolbar
+    toolbarEl.parentNode.insertBefore(annBarEl, toolbarEl.nextSibling);
     shellResult.leftPanel.replaceWith(leftResult.container);
     shellResult.rightPanel.replaceWith(rightResult.container);
     shellResult.statusbar.replaceWith(statusbarEl);
@@ -680,6 +684,34 @@
         };
       }
 
+      // If in edit mode with a selected element, add "add note" action
+      if (state.get('mode.current') === 'edit' && state.selected && annotator) {
+        actions['add-note'] = function() {
+          var selEl = state.selected;
+          var annX = 50, annY = 50;
+          try {
+            var selRect = selEl.getBoundingClientRect();
+            var cvRect = canvasEl.getBoundingClientRect();
+            annX = Math.round((selRect.left - cvRect.left + selRect.width / 2 - 100) / (state.zoom || 1));
+            annY = Math.round((selRect.top - cvRect.top + selRect.height + 10) / (state.zoom || 1));
+          } catch (ex) { /* fallback default position */ }
+          var noteAnn = annotator.create({
+            type: 'sticky',
+            x: annX, y: annY, w: 200, h: 60,
+            text: '', color: '#d48806', status: 'pending',
+            pageId: appFacade.currentPage || null,
+            target: _getSelectedElementTarget(state)
+          });
+          if (noteAnn) {
+            annotationRenderer.render(noteAnn);
+            // Immediately open edit for the note
+            setTimeout(function() {
+              bus.emit('annotation:edit-request', { id: noteAnn.id });
+            }, 100);
+          }
+        };
+      }
+
       contextMenu.show(e, e.target, actions);
     };
     canvasEl.addEventListener('contextmenu', _domHandlers.canvasContextmenu);
@@ -730,6 +762,11 @@
     bus.on('keyboard:zoom-reset', function() { canvas.setZoom(1); });
     bus.on('keyboard:delete', function() { deleteSelected(); });
     bus.on('keyboard:escape', function() {
+      // First: deactivate active annotation tool
+      if (annotationTools.getActiveTool()) {
+        bus.emit('annotation:tool-deactivate');
+        return;
+      }
       if (state.get('placement.type')) {
         state.set('placement.type', null);
         canvasEl.style.cursor = 'default';
@@ -802,10 +839,15 @@
           leftPanelEl.classList.add('cc-left-collapsed');
           rightPanelEl.classList.add('cc-right-collapsed');
           document.body.classList.add('cc-mode-preview');
-          document.body.classList.remove('cc-mode-edit', 'cc-mode-annotate', 'cc-mode-compare');
+          document.body.classList.remove('cc-mode-edit', 'cc-mode-compare');
           selection.deselect();
           transform.removeResizeHandles();
           transform.removeRotateHandle();
+          // Deactivate annotation tools + collapse sub-bar
+          annotationTools.deactivate();
+          var annToggleBtn = toolbar.el.querySelector('.cc-btn-ann-toggle');
+          if (annToggleBtn) annToggleBtn.classList.remove('active');
+          if (toolbar._annBar) toolbar._annBar.style.display = 'none';
           toast.show('预览模式 — 页面可交互', 'info');
           break;
 
@@ -814,47 +856,29 @@
           leftPanelEl.classList.remove('cc-left-collapsed');
           rightPanelEl.classList.remove('cc-right-collapsed');
           document.body.classList.add('cc-mode-edit');
-          document.body.classList.remove('cc-mode-preview', 'cc-mode-annotate', 'cc-mode-compare');
-          // Remove annotation overlay display
-          var annOverlay = canvasEl.querySelector('.cc-annotation-overlay');
-          if (annOverlay) annOverlay.style.display = 'none';
-          var annToolbar = document.querySelector('.cc-ann-toolbar');
-          if (annToolbar) annToolbar.style.display = 'none';
+          document.body.classList.remove('cc-mode-preview', 'cc-mode-compare');
+          // Ensure annotation overlay exists (pointer-events: none by default)
+          var editOverlay = annotationRenderer.getOverlay();
+          if (!editOverlay) {
+            editOverlay = annotationRenderer.createOverlay(canvasEl);
+          }
+          editOverlay.style.display = '';
+          editOverlay.style.pointerEvents = 'none';
+          // Re-render saved annotations
+          var editSavedAnns = state.get('annotations.list') || [];
+          for (var esi = 0; esi < editSavedAnns.length; esi++) {
+            annotationRenderer.render(editSavedAnns[esi]);
+          }
           // Cleanup compare mode if active
           if (compareEngine && compareEngine.getMode()) {
             compareEngine.cleanup();
           }
-          toast.show('编辑模式', 'info');
-          break;
-
-        case 'annotate':
-          // Activate annotation overlay + toolbar
-          document.body.classList.add('cc-mode-annotate');
-          document.body.classList.remove('cc-mode-preview', 'cc-mode-edit', 'cc-mode-compare');
-          selection.deselect();
-          transform.removeResizeHandles();
-          transform.removeRotateHandle();
-          // Create overlay if needed
-          var overlay = annotationRenderer.getOverlay();
-          if (!overlay) {
-            overlay = annotationRenderer.createOverlay(canvasEl);
-          }
-          overlay.style.display = '';
-          annotationTools.setOverlay(overlay);
-          // Re-render all saved annotations onto the overlay
-          var savedAnns = state.get('annotations.list') || [];
-          for (var si = 0; si < savedAnns.length; si++) {
-            annotationRenderer.render(savedAnns[si]);
-          }
-          // Create annotation toolbar
-          _ensureAnnotationToolbar(canvasEl);
-          toast.show('标注模式 — 选择工具后绘制', 'info');
           break;
 
         case 'compare':
           // Compare mode — capture current vs snapshot if available
           document.body.classList.add('cc-mode-compare');
-          document.body.classList.remove('cc-mode-preview', 'cc-mode-edit', 'cc-mode-annotate');
+          document.body.classList.remove('cc-mode-preview', 'cc-mode-edit');
           if (compareEngine) {
             // Capture current canvas as "version 2"
             var currentHtml = canvasEl.innerHTML;
@@ -899,29 +923,114 @@
     bus.on('toolbar:zoom-in', function() { canvas.setZoom((state.zoom || 1) + 0.1); });
     bus.on('toolbar:zoom-out', function() { canvas.setZoom((state.zoom || 1) - 0.1); });
     bus.on('toolbar:save', function() { exportEngine.saveFile(); });
+    bus.on('toolbar:save-as', function() { exportEngine.saveAsFile && exportEngine.saveAsFile(); });
+    bus.on('toolbar:export-html', function() { exportEngine.saveFile(); });
+    bus.on('toolbar:export-png', function() { exportEngine.exportPNG(); });
+    bus.on('toolbar:export-md', function() {
+      var md = exportEngine.exportInstructions();
+      var blob = new Blob([md], { type: 'text/markdown' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'changelog.md';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+      toast.show('Markdown \u5DF2\u5BFC\u51FA', 'success');
+    });
+    bus.on('toolbar:import-html', function() { bus.emit('toolbar:import'); });
+    bus.on('toolbar:import-image', function() {
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.png,.jpg,.jpeg,.gif,.webp';
+      input.onchange = function(ev) {
+        if (ev.target.files && ev.target.files[0]) {
+          exportEngine.importImage && exportEngine.importImage(ev.target.files[0]);
+        }
+      };
+      input.click();
+    });
+    bus.on('toolbar:import-url', function() {
+      var url = window.prompt('\u8F93\u5165 URL:');
+      if (url) bus.emit('url:load', url);
+    });
+    bus.on('toolbar:version-compare', function() {
+      // Switch to versions tab in right panel
+      state.set('rightTab', 'versions');
+      bus.emit('rightPanel:tabChange', 'versions');
+      toast.show('\u8BF7\u5728\u53F3\u4FA7\u300C\u7248\u672C\u300D\u9762\u677F\u9009\u62E9\u7248\u672C\u8FDB\u884C\u5BF9\u6BD4', 'info');
+    });
 
-    // Global sticky visibility toggle
-    bus.on('toolbar:toggle-sticky', function() {
-      var stickies = canvasEl.querySelectorAll('[data-type="sticky"]');
-      if (stickies.length === 0) {
-        toast.show('画布上没有便签', 'info');
+    // Annotation sub-bar tool selection
+    bus.on('annotation:tool-select', function(toolName) {
+      if (state.get('mode.current') !== 'edit') {
+        toast.show('请先进入编辑模式', 'info');
         return;
       }
-      // Check current state: if any are visible, hide all; otherwise show all
-      var anyVisible = false;
-      for (var si = 0; si < stickies.length; si++) {
-        if (stickies[si].style.display !== 'none') { anyVisible = true; break; }
+      // Ensure overlay is ready for annotation tools
+      var toolOverlay = annotationRenderer.getOverlay();
+      if (!toolOverlay) {
+        toolOverlay = annotationRenderer.createOverlay(canvasEl);
       }
-      for (var sj = 0; sj < stickies.length; sj++) {
-        if (anyVisible) {
-          stickies[sj].setAttribute('data-cc-sticky-hidden', 'true');
-          stickies[sj].style.display = 'none';
-        } else {
-          stickies[sj].removeAttribute('data-cc-sticky-hidden');
-          stickies[sj].style.display = '';
-        }
+      toolOverlay.style.display = '';
+      annotationTools.setOverlay(toolOverlay);
+      _bindAnnotationEvents();
+
+      annotationTools.activate(toolName);
+      // Enable pointer events on overlay while tool is active
+      toolOverlay.style.pointerEvents = 'auto';
+      // Sync the annotation sub-bar buttons
+      var annBar = document.querySelector('.cc-toolbar-annotate-bar');
+      if (annBar) {
+        annBar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
+          b.classList.toggle('active', b.getAttribute('data-ann-tool') === toolName);
+        });
       }
-      toast.show(anyVisible ? '已隐藏 ' + stickies.length + ' 个便签' : '已显示 ' + stickies.length + ' 个便签', 'info');
+    });
+
+    // Annotation tool deactivate (toggle collapsed or Escape)
+    bus.on('annotation:tool-deactivate', function() {
+      annotationTools.deactivate();
+      // Restore overlay pointer-events to none
+      var deactOverlay = annotationRenderer.getOverlay();
+      if (deactOverlay) deactOverlay.style.pointerEvents = 'none';
+      // Deactivate sub-bar buttons
+      var deactAnnBar = document.querySelector('.cc-toolbar-annotate-bar');
+      if (deactAnnBar) {
+        deactAnnBar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
+          b.classList.remove('active');
+        });
+      }
+    });
+
+    bus.on('annotation:display-mode', function(mode) {
+      var overlay = canvasEl.querySelector('.cc-annotation-overlay');
+      if (!overlay) return;
+      var annotations = state.get('annotations.list') || [];
+      var annRenderer = CC.annotationRenderer;
+
+      switch (mode) {
+        case 'full':
+          overlay.style.opacity = '1';
+          overlay.style.display = '';
+          annotations.forEach(function(ann) {
+            var el = annRenderer._elements[ann.id];
+            if (el) el.style.opacity = '1';
+          });
+          break;
+        case 'compact':
+          overlay.style.opacity = '1';
+          overlay.style.display = '';
+          annotations.forEach(function(ann) {
+            var el = annRenderer._elements[ann.id];
+            if (el) el.style.opacity = ann.type === 'number' ? '1' : '0.3';
+          });
+          break;
+        case 'hidden':
+          overlay.style.display = 'none';
+          break;
+      }
     });
     bus.on('toolbar:export', function() {
       // Export changelog as .md download
@@ -943,6 +1052,21 @@
     // Settings dialog
     bus.on('toolbar:settings', function() {
       if (settingsDialog) settingsDialog.open();
+    });
+
+    // Toolbar: Toggle annotation sub-bar
+    bus.on('toolbar:toggle-annotation', function() {
+      if (state.get('mode.current') !== 'edit') {
+        toast.show('请先进入编辑模式', 'info');
+        return;
+      }
+      var opened = toolbar._toggleAnnotationBar();
+      if (!opened) {
+        // Collapsed — deactivate any active tool
+        annotationTools.deactivate();
+        var colOverlay = annotationRenderer.getOverlay();
+        if (colOverlay) colOverlay.style.pointerEvents = 'none';
+      }
     });
 
     // Toolbar: Export PNG
@@ -1026,34 +1150,62 @@
     // ==================== Annotation Tab Events ====================
     // Tool selected from annotations tab → activate it
     bus.on('annotation:activate-tool', function(data) {
-      if (modeMachine.current() !== 'annotate') {
-        modeMachine.transition('annotate');
+      if (state.get('mode.current') !== 'edit') {
+        toast.show('请先进入编辑模式', 'info');
+        return;
       }
+      // Ensure overlay is ready
+      var atOverlay = annotationRenderer.getOverlay();
+      if (!atOverlay) {
+        atOverlay = annotationRenderer.createOverlay(canvasEl);
+      }
+      atOverlay.style.display = '';
+      annotationTools.setOverlay(atOverlay);
+      _bindAnnotationEvents();
+
       annotationTools.activate(data.tool);
-      // Sync floating toolbar buttons
-      var annToolbar = document.querySelector('.cc-ann-toolbar');
-      if (annToolbar) {
-        annToolbar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
-          b.classList.toggle('active', b.getAttribute('data-tool') === data.tool);
+      atOverlay.style.pointerEvents = 'auto';
+      // Expand annotation sub-bar if collapsed
+      if (toolbar._annBar) toolbar._annBar.style.display = 'flex';
+      var annToggleUpd = toolbar.el.querySelector('.cc-btn-ann-toggle');
+      if (annToggleUpd) annToggleUpd.classList.add('active');
+      // Sync annotation sub-bar buttons
+      var annBar = document.querySelector('.cc-toolbar-annotate-bar');
+      if (annBar) {
+        annBar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
+          b.classList.toggle('active', b.getAttribute('data-ann-tool') === data.tool);
         });
       }
     });
 
-    // New annotation request → switch to annotate mode + activate default tool
+    // New annotation request → activate default tool
     bus.on('annotation:new-request', function() {
-      if (modeMachine.current() !== 'annotate') {
-        modeMachine.transition('annotate');
+      if (state.get('mode.current') !== 'edit') {
+        toast.show('请先进入编辑模式', 'info');
+        return;
       }
+      // Ensure overlay
+      var nrOverlay = annotationRenderer.getOverlay();
+      if (!nrOverlay) {
+        nrOverlay = annotationRenderer.createOverlay(canvasEl);
+      }
+      nrOverlay.style.display = '';
+      annotationTools.setOverlay(nrOverlay);
+      _bindAnnotationEvents();
+
       // Activate arrow tool by default
       annotationTools.activate('arrow');
-      // Highlight the arrow tool button in the toolbar
-      var toolbar = document.querySelector('.cc-ann-toolbar');
-      if (toolbar) {
-        toolbar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
-          b.classList.toggle('active', b.getAttribute('data-tool') === 'arrow');
+      nrOverlay.style.pointerEvents = 'auto';
+      // Expand sub-bar + sync buttons
+      if (toolbar._annBar) toolbar._annBar.style.display = 'flex';
+      var nrToggle = toolbar.el.querySelector('.cc-btn-ann-toggle');
+      if (nrToggle) nrToggle.classList.add('active');
+      var annBar = document.querySelector('.cc-toolbar-annotate-bar');
+      if (annBar) {
+        annBar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
+          b.classList.toggle('active', b.getAttribute('data-ann-tool') === 'arrow');
         });
       }
-      toast.show('已切换到标注模式 — 选择工具后在画布上绘制', 'info');
     });
 
     // Tool complete → persist annotation to state
@@ -1104,7 +1256,8 @@
         text: text,
         color: defaultColor,
         status: defaultStatus,
-        pageId: appFacade.currentPage || null
+        pageId: appFacade.currentPage || null,
+        target: _getSelectedElementTarget(state)
       });
 
       // Render via annotation renderer for persistent display
@@ -1120,10 +1273,7 @@
       // Use renderer highlight
       annotationRenderer.highlight(data.id);
       setTimeout(function() { annotationRenderer._clearHighlights(); }, 2000);
-      // Switch to annotate mode if not already
-      if (modeMachine.current() !== 'annotate') {
-        modeMachine.transition('annotate');
-      }
+      // Just highlight, no mode switch needed
     });
 
     // Delete annotation
@@ -1832,68 +1982,28 @@
   }
 
   // ==================== Annotation Helpers ====================
+  /**
+   * Build a CSS selector string for the currently selected element.
+   * Returns null if no element is selected.
+   */
+  function _getSelectedElementTarget(state) {
+    var sel = state.selected || state.get('canvas.selectedElement');
+    if (!sel) return null;
+    // Prefer id, then data-type + class, then tag + nth-child
+    if (sel.id) return '#' + sel.id;
+    var tag = (sel.tagName || 'div').toLowerCase();
+    var dt = sel.getAttribute('data-type');
+    if (dt) return tag + '[data-type="' + dt + '"]';
+    var cls = sel.className && typeof sel.className === 'string' ? sel.className.split(/\s+/).filter(function(c) {
+      return c && c.indexOf('cc-') !== 0;
+    })[0] : '';
+    if (cls) return tag + '.' + cls;
+    return tag;
+  }
+
   function _ensureAnnotationToolbar(canvasEl) {
-    var existing = document.querySelector('.cc-ann-toolbar');
-    if (existing) {
-      existing.style.display = '';
-      _bindAnnotationEvents();
-      return;
-    }
-
-    var tools = [
-      { name: 'arrow', label: '箭头' },
-      { name: 'rect', label: '矩形' },
-      { name: 'text', label: '文字' },
-      { name: 'measure', label: '测量' },
-      { name: 'sticky', label: '便签' },
-      { name: 'number', label: '编号' },
-      { name: 'brush', label: '画笔' },
-      { name: 'mosaic', label: '马赛克' }
-    ];
-
-    var toolbar = document.createElement('div');
-    toolbar.className = 'cc-ann-toolbar';
-    toolbar.innerHTML = '<span class="cc-ann-toolbar-title">标注工具</span>';
-
-    tools.forEach(function(t) {
-      var btn = document.createElement('button');
-      btn.className = 'cc-ann-tool-btn';
-      btn.textContent = t.label;
-      btn.setAttribute('data-tool', t.name);
-      btn.addEventListener('click', function() {
-        // Remove active from all
-        toolbar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        CC.annotationTools.activate(t.name);
-        // Sync annotations tab tool grid
-        var tabGrid = document.querySelector('#cc-ann-tool-grid');
-        if (tabGrid) {
-          tabGrid.querySelectorAll('.cc-ann-tool-card').forEach(function(c) {
-            c.classList.toggle('active', c.getAttribute('data-tool') === t.name);
-          });
-        }
-      });
-      toolbar.appendChild(btn);
-    });
-
-    // Close annotation toolbar button
-    var closeBtn = document.createElement('button');
-    closeBtn.className = 'cc-ann-tool-btn cc-ann-tool-close';
-    closeBtn.textContent = 'X';
-    closeBtn.title = '关闭标注';
-    closeBtn.addEventListener('click', function() {
-      CC.annotationTools.deactivate();
-      toolbar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) { b.classList.remove('active'); });
-    });
-    toolbar.appendChild(closeBtn);
-
-    // Place toolbar above canvas
-    var viewport = CC.state.get('canvas.viewport');
-    if (viewport) {
-      viewport.style.position = 'relative';
-      viewport.appendChild(toolbar);
-    }
-
+    // Toolbar UI is now in the main toolbar annotation sub-bar (annBar)
+    // Only ensure annotation events are bound
     _bindAnnotationEvents();
   }
 

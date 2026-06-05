@@ -57,17 +57,37 @@
     snapBtn.className = 'cc-ann-btn-new';
     snapBtn.textContent = '+ 创建快照';
     snapBtn.onclick = function () {
-      var label = prompt('快照名称:', '快照 ' + (self._getSnapshots().length + 1));
-      if (label && label.trim()) {
-        if (self._app && self._app.snapshot) {
-          self._app.snapshot.create(label.trim());
-          self.refresh();
-        }
-      }
+      self._openCreateSnapshotUI();
     };
     header.appendChild(snapBtn);
 
     return header;
+  };
+
+  /** Show inline snapshot name input instead of prompt(). */
+  VersionsTab.prototype._openCreateSnapshotUI = function () {
+    var self = this;
+    var html = '<div class="cc-comp-form">' +
+      '<div class="cc-comp-row"><label>\u5FEB\u7167\u540D\u79F0</label>' +
+      '<input class="cc-comp-input" id="cc-snap-name" value="\u5FEB\u7167 ' +
+      (self._getSnapshots().length + 1) + '"></div></div>';
+
+    var modal = window.CCModal;
+    if (!modal) return;
+    modal.show('\u521B\u5EFA\u5FEB\u7167', html, [
+      { text: '\u53D6\u6D88', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } },
+      {
+        text: '\u521B\u5EFA', cls: 'primary', fn: function (d) {
+          var input = document.getElementById('cc-snap-name');
+          var label = input ? input.value.trim() : '';
+          if (label && self._app && self._app.snapshot) {
+            self._app.snapshot.create(label);
+            self.refresh();
+          }
+          if (d && d.parentElement) d.parentElement.remove();
+        }
+      }
+    ]);
   };
 
   /** Create the compare selector bar. */
@@ -201,12 +221,7 @@
     deleteBtn.title = '删除';
     deleteBtn.onclick = function (e) {
       e.stopPropagation();
-      if (confirm('确定删除快照「' + snap.label + '」?')) {
-        if (self._app && self._app.snapshot) {
-          self._app.snapshot.remove(snap.id);
-          self.refresh();
-        }
-      }
+      self._confirmDelete(snap.id, snap.label);
     };
     actions.appendChild(deleteBtn);
 
@@ -217,21 +232,60 @@
   /** Show restore confirmation dialog. */
   VersionsTab.prototype._confirmRestore = function (id, label) {
     var self = this;
-    if (confirm('恢复快照「' + label + '」? 当前未保存的更改将丢失。')) {
-      if (this._app && this._app.snapshot) {
-        this._app.snapshot.restore(id);
-      }
-      if (this._app && this._app.restoreSnapshot) {
-        this._app.restoreSnapshot(id);
-      }
-      this.refresh();
+    var modal = window.CCModal;
+    if (!modal) {
+      // Fallback: just do it
+      this._doRestore(id);
+      return;
     }
+    var html = '<div style="padding:12px;font-size:13px;">\u6062\u590D\u5FEB\u7167\u300C' +
+      label + '\u300D? \u5F53\u524D\u672A\u4FDD\u5B58\u7684\u66F4\u6539\u5C06\u4E22\u5931\u3002</div>';
+    modal.show('\u786E\u8BA4\u6062\u590D', html, [
+      { text: '\u53D6\u6D88', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } },
+      {
+        text: '\u6062\u590D', cls: 'primary', fn: function (d) {
+          self._doRestore(id);
+          self.refresh();
+          if (d && d.parentElement) d.parentElement.remove();
+        }
+      }
+    ]);
+  };
+
+  VersionsTab.prototype._doRestore = function (id) {
+    if (this._app && this._app.snapshot) {
+      this._app.snapshot.restore(id);
+    }
+    if (this._app && this._app.restoreSnapshot) {
+      this._app.restoreSnapshot(id);
+    }
+  };
+
+  /** Confirm delete with modal instead of confirm(). */
+  VersionsTab.prototype._confirmDelete = function (id, label) {
+    var self = this;
+    var modal = window.CCModal;
+    if (!modal) return;
+    var html = '<div style="padding:12px;font-size:13px;">\u786E\u5B9A\u5220\u9664\u5FEB\u7167\u300C' +
+      label + '\u300D?</div>';
+    modal.show('\u786E\u8BA4\u5220\u9664', html, [
+      { text: '\u53D6\u6D88', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } },
+      {
+        text: '\u5220\u9664', cls: 'danger', fn: function (d) {
+          if (self._app && self._app.snapshot) {
+            self._app.snapshot.remove(id);
+            self.refresh();
+          }
+          if (d && d.parentElement) d.parentElement.remove();
+        }
+      }
+    ]);
   };
 
   /** Execute version comparison. */
   VersionsTab.prototype._doCompare = function () {
     if (!this._compareA || !this._compareB) {
-      alert('请先选择两个版本进行对比。');
+      if (window.__CC && window.__CC.toast) window.__CC.toast.show('\u8BF7\u5148\u9009\u62E9\u4E24\u4E2A\u7248\u672C\u8FDB\u884C\u5BF9\u6BD4', 'info');
       return;
     }
 
@@ -239,7 +293,7 @@
     var snapB = this._app.snapshot.get(this._compareB);
 
     if (!snapA || !snapB) {
-      alert('所选版本未找到。');
+      if (window.__CC && window.__CC.toast) window.__CC.toast.show('\u6240\u9009\u7248\u672C\u672A\u627E\u5230', 'info');
       return;
     }
 
@@ -247,7 +301,17 @@
     var result = differ.compare(snapA, snapB);
     var text = differ.formatDiff(result);
 
-    alert('对比结果:\n' + text);
+    // Render comparison result inline in a modal
+    var html = '<div class="cc-comp-form">' +
+      '<textarea class="cc-comp-input cc-comp-textarea" rows="14" readonly style="font-size:11px;font-family:Consolas,monospace;">' +
+      text.replace(/</g, '&lt;') + '</textarea></div>';
+
+    var modal = window.CCModal;
+    if (modal) {
+      modal.show('\u7248\u672C\u5BF9\u6BD4\u7ED3\u679C', html, [
+        { text: '\u5173\u95ED', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } }
+      ]);
+    }
   };
 
   /** Get snapshots array from app. */

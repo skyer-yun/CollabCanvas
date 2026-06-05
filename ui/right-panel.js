@@ -1,6 +1,6 @@
 ;(function () {
-  var TABS = ['properties', 'changes', 'notes', 'styles', 'versions', 'ai'];
-  var LABELS = { properties: '属性', changes: '变更', notes: '备注标注', styles: '样式', versions: '版本', ai: 'AI' };
+  var TABS = ['properties', 'changes', 'notes', 'styles', 'versions'];
+  var LABELS = { properties: '\u5C5E\u6027', changes: '\u53D8\u66F4', notes: '\u5907\u6CE8\u6807\u6CE8', styles: '\u6837\u5F0F', versions: '\u7248\u672C' };
 
   function RightPanel(state, bus) {
     this.state = state;

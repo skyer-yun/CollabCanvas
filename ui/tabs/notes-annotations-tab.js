@@ -23,10 +23,12 @@
     this._filterModule = 'all';
     this._filterPriority = 'all';
     this._filterReqType = 'all';
+    this._filterSelectedOnly = false;
     this._onAnnotationCreated = this._onAnnotationChanged.bind(this);
     this._onAnnotationUpdated = this._onAnnotationChanged.bind(this);
     this._onAnnotationRemoved = this._onAnnotationChanged.bind(this);
     this._onElementCreated = this._onAnnotationChanged.bind(this);
+    this._onSelectionChanged = this._onAnnotationChanged.bind(this);
   }
 
   NotesAnnotationsTab.prototype.render = function (container) {
@@ -46,6 +48,7 @@
     this._bus.on('annotation:updated', this._onAnnotationUpdated);
     this._bus.on('annotation:removed', this._onAnnotationRemoved);
     this._bus.on('element:created', this._onElementCreated);
+    this._bus.on('selection:changed', this._onSelectionChanged);
   };
 
   NotesAnnotationsTab.prototype._onAnnotationChanged = function () {
@@ -223,6 +226,20 @@
     prdBar.appendChild(reqSel);
 
     container.appendChild(prdBar);
+
+    // "Selected element only" toggle (v2.1)
+    var selBar = document.createElement('div');
+    selBar.className = 'cc-na-filters cc-na-sel-filter';
+    var selToggle = document.createElement('button');
+    selToggle.className = 'cc-na-filter-btn' + (self._filterSelectedOnly ? ' active' : '');
+    selToggle.textContent = '\u4EC5\u770B\u9009\u4E2D\u5143\u7D20';
+    selToggle.title = '\u53EA\u663E\u793A\u5173\u8054\u5F53\u524D\u9009\u4E2D\u5143\u7D20\u7684\u6807\u6CE8';
+    selToggle.addEventListener('click', function () {
+      self._filterSelectedOnly = !self._filterSelectedOnly;
+      self._draw(container);
+    });
+    selBar.appendChild(selToggle);
+    container.appendChild(selBar);
   };
 
   // ---- List ----
@@ -307,6 +324,20 @@
       compTag.className = 'cc-na-tag cc-na-tag-comp';
       compTag.textContent = s.component;
       meta.appendChild(compTag);
+    }
+    // v2.1: Show target element association
+    if (ann.target) {
+      var targetTag = document.createElement('span');
+      targetTag.className = 'cc-na-tag cc-na-tag-target';
+      targetTag.textContent = '\u2192 ' + ann.target;
+      targetTag.title = '\u5173\u8054\u5143\u7D20: ' + ann.target;
+      meta.appendChild(targetTag);
+    } else {
+      var freeTag = document.createElement('span');
+      freeTag.className = 'cc-na-tag';
+      freeTag.textContent = '\u81EA\u7531\u6807\u6CE8';
+      freeTag.style.color = '#8c8c8c';
+      meta.appendChild(freeTag);
     }
     // PRD fields: module tag
     if (ann.module) {
@@ -600,7 +631,22 @@
     var filterModule = this._filterModule;
     var filterPriority = this._filterPriority;
     var filterReqType = this._filterReqType;
+    var filterSelectedOnly = this._filterSelectedOnly;
     var currentPageId = this._state.get('annotations.currentPageId');
+
+    // Build current selected element target for filtering
+    var selectedTarget = null;
+    if (filterSelectedOnly) {
+      var sel = this._state.selected || this._state.get('canvas.selectedElement');
+      if (sel) {
+        if (sel.id) selectedTarget = '#' + sel.id;
+        else {
+          var tag = (sel.tagName || 'div').toLowerCase();
+          var dt = sel.getAttribute('data-type');
+          if (dt) selectedTarget = tag + '[data-type="' + dt + '"]';
+        }
+      }
+    }
 
     return list.filter(function (a) {
       // v1.5: Filter by current page if set
@@ -609,6 +655,11 @@
       if (filterModule !== 'all' && a.module !== filterModule) return false;
       if (filterPriority !== 'all' && a.priority !== filterPriority) return false;
       if (filterReqType !== 'all' && a.requirementType !== filterReqType) return false;
+      // v2.1: Filter by selected element target
+      if (filterSelectedOnly) {
+        if (!selectedTarget) return false;
+        if (a.target !== selectedTarget) return false;
+      }
       return true;
     });
   };
@@ -630,7 +681,24 @@
     var self = this;
     var currentPageId = this._state.get('annotations.currentPageId');
 
+    // v2.1: Check for selected element to auto-associate
+    var selEl = this._state.selected || this._state.get('canvas.selectedElement');
+    var selTarget = null;
+    if (selEl) {
+      if (selEl.id) selTarget = '#' + selEl.id;
+      else {
+        var stag = (selEl.tagName || 'div').toLowerCase();
+        var sdt = selEl.getAttribute('data-type');
+        if (sdt) selTarget = stag + '[data-type="' + sdt + '"]';
+      }
+    }
+
+    var targetHint = selTarget
+      ? '<div class="cc-comp-row"><label>\u5173\u8054\u5143\u7D20</label><span style="color:#1677ff;font-size:11px;">' + selTarget + '</span></div>'
+      : '<div class="cc-comp-row"><label style="color:#8c8c8c;">\u81EA\u7531\u6807\u6CE8\uFF08\u672A\u5173\u8054\u5143\u7D20\uFF09</label></div>';
+
     var html = '<div class="cc-comp-form">' +
+      targetHint +
       '<div class="cc-comp-row"><label>\u5185\u5BB9</label>' +
       '<textarea class="cc-comp-input cc-comp-textarea" id="cc-na-note-text" rows="4" placeholder="\u8F93\u5165\u5907\u6CE8\u5185\u5BB9"></textarea></div>' +
       '<div class="cc-comp-row"><label>\u6240\u5C5E\u6A21\u5757</label>' +
@@ -666,10 +734,19 @@
           var annotator = window.__CC && window.__CC.annotator;
           if (!annotator) return;
 
+          // Position at canvas center instead of random
+          var canvasEl = self._state.canvas;
+          var annX = 50, annY = 50;
+          if (canvasEl) {
+            var rect = canvasEl.getBoundingClientRect();
+            annX = Math.round(rect.width / 2 - 100);
+            annY = Math.round(rect.height / 2 - 30);
+          }
+
           var ann = annotator.create({
             type: 'sticky',
-            x: 50 + Math.random() * 100,
-            y: 50 + Math.random() * 100,
+            x: annX,
+            y: annY,
             w: 200,
             h: 60,
             text: noteText,
@@ -678,7 +755,8 @@
             module: moduleEl ? moduleEl.value : '',
             priority: priorityEl ? priorityEl.value : 'medium',
             requirementType: reqTypeEl ? reqTypeEl.value : 'functional',
-            pageId: currentPageId || null
+            pageId: currentPageId || null,
+            target: selTarget
           });
 
           // Render on canvas
@@ -850,6 +928,7 @@
     this._bus.off('annotation:updated', this._onAnnotationUpdated);
     this._bus.off('annotation:removed', this._onAnnotationRemoved);
     this._bus.off('element:created', this._onElementCreated);
+    this._bus.off('selection:changed', this._onSelectionChanged);
     this._eventsBound = false;
   };
 

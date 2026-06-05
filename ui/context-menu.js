@@ -6,7 +6,7 @@
     'z-down':   { label: '下移一层',  icon: '↓' },
     copy:       { label: '复制',      icon: '⎘' },
     cut:        { label: '剪切',      icon: '✂' },
-    paste:      { label: '粘贴',      icon: '📋' },
+    paste:      { label: '粘贴',      icon: '\u2318' },
     delete:     { label: '删除',      icon: '✕' },
     'promote-to-annotation': { label: '转为标注', icon: '◉' }
   };
@@ -42,8 +42,18 @@
       this._addGroup(menu, extraKeys, actions, targetEl);
     }
 
-    menu.style.left = e.clientX + 'px';
-    menu.style.top = e.clientY + 'px';
+    // Viewport boundary check
+    var menuRect = menu.getBoundingClientRect();
+    var left = e.clientX;
+    var top = e.clientY;
+    if (left + menuRect.width > window.innerWidth) {
+      left = window.innerWidth - menuRect.width - 8;
+    }
+    if (top + menuRect.height > window.innerHeight) {
+      top = window.innerHeight - menuRect.height - 8;
+    }
+    menu.style.left = Math.max(0, left) + 'px';
+    menu.style.top = Math.max(0, top) + 'px';
 
     document.body.appendChild(menu);
     this.el = menu;

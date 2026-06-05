@@ -1,18 +1,17 @@
 /**
  * CollabCanvas - Mode Machine
- * Manages application modes: preview, edit, annotate, compare
+ * Manages application modes: preview, edit, compare
  * IIFE exporting window.CCModeMachine
  */
 ;(function () {
   'use strict';
 
-  var MODES = ['preview', 'edit', 'annotate', 'compare'];
+  var MODES = ['preview', 'edit', 'compare'];
 
   var TRANSITIONS = {
-    preview:  ['edit', 'compare'],
-    edit:     ['preview', 'annotate', 'compare'],
-    annotate: ['edit', 'preview'],
-    compare:  ['preview', 'edit']
+    preview: ['edit', 'compare'],
+    edit:    ['preview', 'compare'],
+    compare: ['preview', 'edit']
   };
 
   /**

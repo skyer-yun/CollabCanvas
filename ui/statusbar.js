@@ -63,7 +63,7 @@
   };
 
   StatusBar.prototype.updateMode = function (mode) {
-    var MAP = { preview: '预览', edit: '编辑', annotate: '标注', compare: '对比' };
+    var MAP = { preview: '预览', edit: '编辑', compare: '对比' };
     if (this._mode) this._mode.textContent = MAP[mode] || (mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : '');
   };
 

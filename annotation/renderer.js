@@ -260,12 +260,14 @@
     var g = this._svgEl('g', {});
     var r = this._svgEl('rect', {
       x: ann.x, y: ann.y, width: ann.w || 180, height: ann.h || 100,
-      fill: '#fffbe6', stroke: '#ffe58f', 'stroke-width': 2, rx: 6
+      fill: '#fffbe6', stroke: '#ffe58f', 'stroke-width': 2, rx: 6,
+      style: 'cursor:pointer'
     });
     g.appendChild(r);
     if (ann.text) {
       var t = this._svgEl('text', {
-        x: ann.x + 10, y: ann.y + 20, 'font-size': 14, fill: '#1f1f1f'
+        x: ann.x + 10, y: ann.y + 20, 'font-size': 14, fill: '#1f1f1f',
+        style: 'cursor:pointer;pointer-events:all'
       });
       t.textContent = ann.text;
       g.appendChild(t);

@@ -164,7 +164,7 @@
         cards[i].classList.toggle('active', cards[i].getAttribute('data-tool') === toolName);
       }
     }
-    // Emit to main.js to activate tool and enter annotate mode
+    // Emit to main.js to activate annotation tool
     if (this._bus) {
       this._bus.emit('annotation:activate-tool', { tool: toolName });
     }
