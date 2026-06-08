@@ -514,6 +514,7 @@ body.cc-placing .cc-viewport { cursor: crosshair !important; }
 .cc-comp-item:hover .cc-comp-icon {
   background: var(--cc-primary-bg); color: var(--cc-primary);
 }
+/* Annotation group items — same style as other groups */
 
 /* ===== Layer List ===== */
 .cc-layer-list { display: flex; flex-direction: column; gap: 1px; }
@@ -1205,6 +1206,37 @@ body.cc-mode-edit .cc-canvas { pointer-events: auto; }
   background: var(--cc-primary-bg); border-color: var(--cc-primary);
   color: var(--cc-primary); font-weight: 500;
 }
+
+/* v2.2: Page-level notes area */
+.cc-na-page-section {
+  padding: 8px 10px; border-bottom: 1px solid var(--cc-border-light);
+}
+.cc-na-page-label {
+  font-size: 11px; font-weight: 500; color: var(--cc-text-secondary);
+  margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;
+}
+.cc-na-page-import-link {
+  font-size: 11px; color: var(--cc-primary); background: none; border: none;
+  cursor: pointer; padding: 0; text-decoration: underline; font-family: inherit;
+}
+.cc-na-page-import-link:hover { opacity: 0.8; }
+.cc-na-page-textarea {
+  width: 100%; min-height: 60px; font-size: 12px; padding: 6px;
+  border: 1px solid var(--cc-border); border-radius: var(--cc-radius-sm);
+  resize: vertical; font-family: inherit; background: var(--cc-bg-secondary);
+  color: var(--cc-text); box-sizing: border-box;
+}
+.cc-na-page-textarea:focus {
+  border-color: var(--cc-primary); outline: none;
+}
+
+/* v2.2: Inline edit textarea */
+.cc-na-inline-edit {
+  width: 100%; min-height: 40px; font-size: 12px; padding: 4px;
+  border: 1px solid var(--cc-primary); border-radius: var(--cc-radius-sm);
+  resize: vertical; font-family: inherit; color: var(--cc-text);
+  background: var(--cc-bg); box-sizing: border-box;
+}
 .cc-na-list { flex: 1; overflow-y: auto; }
 .cc-na-list::-webkit-scrollbar { width: 4px; }
 .cc-na-list::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 2px; }
@@ -1218,6 +1250,10 @@ body.cc-mode-edit .cc-canvas { pointer-events: auto; }
   transition: background .1s;
 }
 .cc-na-item:hover { background: var(--cc-bg-secondary); }
+.cc-na-highlight {
+  background: var(--cc-primary-bg, rgba(22,119,255,0.1)) !important;
+  transition: background 0.3s;
+}
 .cc-na-num {
   flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
   background: var(--cc-primary); color: #fff; font-size: 11px; font-weight: 700;

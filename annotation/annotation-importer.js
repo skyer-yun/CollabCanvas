@@ -61,7 +61,7 @@
           }
 
           annotator.create({
-            type: 'text',
+            type: ann.type || 'sticky',
             x: coords.x,
             y: coords.y,
             w: coords.w || 120,
@@ -126,7 +126,7 @@
         var coords = this._resolveTarget(ann.target);
 
         annotator.create({
-          type: ann.type || 'text',
+          type: ann.type || 'sticky',
           x: coords ? coords.x : (ann.x || 50),
           y: coords ? coords.y : (ann.y || 50 + i * 60),
           w: ann.w || (coords ? coords.w : 120),
@@ -190,7 +190,7 @@
 
       try {
         annotator.create({
-          type: 'text',
+          type: feat.type || 'sticky',
           x: 50,
           y: 50 + i * 80,
           w: 200,

@@ -9,8 +9,6 @@
 ;(function () {
   'use strict';
 
-  var DISPLAY_MODES = ['full', 'compact', 'hidden'];
-  var DISPLAY_LABELS = { full: '完整', compact: '紧凑', hidden: '隐藏' };
   var STATUS_LABELS = { pending: '待处理', 'in-progress': '进行中', resolved: '已解决' };
 
   function NotesAnnotationsTab(state, bus) {
@@ -18,7 +16,6 @@
     this._bus = bus;
     this._container = null;
     this._filter = 'all';
-    this._displayMode = 'full';
     this._eventsBound = false;
     this._filterModule = 'all';
     this._filterPriority = 'all';
@@ -49,10 +46,24 @@
     this._bus.on('annotation:removed', this._onAnnotationRemoved);
     this._bus.on('element:created', this._onElementCreated);
     this._bus.on('selection:changed', this._onSelectionChanged);
+
+    // v2.3: Scroll to annotation from canvas click
+    var self = this;
+    this._bus.on('notes-tab:scroll-to', function(data) {
+      self._scrollToAnnotation(data.id);
+    });
   };
 
   NotesAnnotationsTab.prototype._onAnnotationChanged = function () {
     this._drawList();
+  };
+
+  NotesAnnotationsTab.prototype._scrollToAnnotation = function (id) {
+    var item = this._container ? this._container.querySelector('[data-ann-row="' + id + '"]') : null;
+    if (!item) return;
+    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    item.classList.add('cc-na-highlight');
+    setTimeout(function() { item.classList.remove('cc-na-highlight'); }, 2000);
   };
 
   // ---- Full Draw ----
@@ -65,6 +76,10 @@
 
     // Header with display mode toggle + export
     this._drawHeader(c);
+
+    // Page-level notes area (before filter, after header)
+    this._drawPageNotes(c);
+
     // List
     this._drawList(c);
   };
@@ -114,6 +129,16 @@
     });
     actions.appendChild(addBtn);
 
+    // v2.2: Batch add button
+    var batchBtn = document.createElement('button');
+    batchBtn.className = 'cc-na-add-btn';
+    batchBtn.textContent = '\u6279\u91CF';
+    batchBtn.title = '\u6279\u91CF\u6DFB\u52A0\u5907\u6CE8\uFF08\u6BCF\u884C\u4E00\u4E2A\uFF09';
+    batchBtn.addEventListener('click', function () {
+      self._openBatchAddDialog();
+    });
+    actions.appendChild(batchBtn);
+
     // v1.5: Import button
     var importBtn = document.createElement('button');
     importBtn.className = 'cc-na-import-btn';
@@ -136,24 +161,7 @@
 
     header.appendChild(actions);
 
-    // Display mode buttons
-    var modeGroup = document.createElement('div');
-    modeGroup.className = 'cc-na-mode-group';
-    DISPLAY_MODES.forEach(function (mode) {
-      var btn = document.createElement('button');
-      btn.className = 'cc-na-mode-btn' + (self._displayMode === mode ? ' active' : '');
-      btn.textContent = DISPLAY_LABELS[mode];
-      btn.title = mode === 'full' ? '\u5B8C\u6574\u663E\u793A' : mode === 'compact' ? '\u7D27\u51D1\u663E\u793A' : '\u9690\u85CF\u6807\u6CE8';
-      btn.addEventListener('click', function () {
-        self._displayMode = mode;
-        self._applyDisplayMode();
-        self._drawHeader(container);
-      });
-      modeGroup.appendChild(btn);
-    });
-    header.appendChild(modeGroup);
-
-    // Original export button (keep for standalone export)
+    // Export button
     var origExportBtn = document.createElement('button');
     origExportBtn.className = 'cc-na-export-btn';
     origExportBtn.textContent = '\u5BFC\u51FA';
@@ -286,6 +294,7 @@
     var item = document.createElement('div');
     item.className = 'cc-na-item';
     item.setAttribute('data-ann-id', ann.id);
+    item.setAttribute('data-ann-row', ann.id);
 
     // Left: number badge (respects autoNumber setting)
     var badge = document.createElement('div');
@@ -299,10 +308,27 @@
     var content = document.createElement('div');
     content.className = 'cc-na-content';
 
-    // Row 1: text
+    // Row 1: text (double-click to inline edit)
     var textRow = document.createElement('div');
     textRow.className = 'cc-na-text';
     textRow.textContent = ann.text || '(无内容)';
+    textRow.addEventListener('dblclick', function(e) {
+      e.stopPropagation();
+      var ta = document.createElement('textarea');
+      ta.className = 'cc-na-inline-edit';
+      ta.value = ann.text || '';
+      textRow.replaceWith(ta);
+      ta.focus();
+      ta.addEventListener('blur', function() {
+        if (ta.value.trim() !== (ann.text || '')) {
+          self._bus.emit('annotation:edit', { id: ann.id, changes: { text: ta.value.trim() } });
+        }
+        self._drawList();
+      });
+      ta.addEventListener('keydown', function(ke) {
+        if (ke.key === 'Escape') { ta.blur(); }
+      });
+    });
     content.appendChild(textRow);
 
     // Row 2: meta (area + component + coords)
@@ -355,6 +381,17 @@
       priTag.textContent = PRI_LABELS[ann.priority];
       priTag.style.background = PRI_COLORS[ann.priority] + '20';
       priTag.style.color = PRI_COLORS[ann.priority];
+      // v2.2: Click to cycle priority
+      priTag.style.cursor = 'pointer';
+      priTag.title = '\u70B9\u51FB\u5207\u6362\u4F18\u5148\u7EA7';
+      priTag.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var priCycle = ['high', 'medium', 'low'];
+        var priIdx = priCycle.indexOf(ann.priority);
+        var priNext = priCycle[(priIdx + 1) % priCycle.length];
+        self._bus.emit('annotation:edit', { id: ann.id, changes: { priority: priNext } });
+        self._drawList();
+      });
       meta.appendChild(priTag);
     }
     // PRD fields: requirementType tag
@@ -380,6 +417,17 @@
     statusTag.textContent = STATUS_LABELS[ann.status] || ann.status;
     statusTag.style.color = ann.status === 'resolved' ? '#52c41a' :
       ann.status === 'in-progress' ? '#1677ff' : '#faad14';
+    // v2.2: Click to cycle status
+    statusTag.style.cursor = 'pointer';
+    statusTag.title = '\u70B9\u51FB\u5207\u6362\u72B6\u6001';
+    statusTag.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var cycle = ['pending', 'in-progress', 'resolved'];
+      var idx = cycle.indexOf(ann.status);
+      var next = cycle[(idx + 1) % cycle.length];
+      self._bus.emit('annotation:edit', { id: ann.id, changes: { status: next } });
+      self._drawList();
+    });
     meta.appendChild(statusTag);
 
     content.appendChild(meta);
@@ -427,48 +475,6 @@
     });
 
     return item;
-  };
-
-  // ---- Display Mode ----
-
-  NotesAnnotationsTab.prototype._applyDisplayMode = function () {
-    var overlay = document.querySelector('.cc-annotation-overlay');
-    if (!overlay) return;
-
-    var annotations = this._state.get('annotations.list') || [];
-    var renderer = window.__CC && window.__CC.annotationRenderer;
-
-    switch (this._displayMode) {
-      case 'full':
-        overlay.style.opacity = '1';
-        overlay.style.display = '';
-        break;
-      case 'compact':
-        // Show only number circles, hide text/sticky/brush details
-        overlay.style.opacity = '1';
-        overlay.style.display = '';
-        // Compact: reduce opacity on non-number annotations
-        if (renderer) {
-          annotations.forEach(function (ann) {
-            var el = renderer._elements[ann.id];
-            if (el) {
-              el.style.opacity = ann.type === 'number' ? '1' : '0.3';
-            }
-          });
-        }
-        break;
-      case 'hidden':
-        overlay.style.display = 'none';
-        break;
-    }
-
-    // Restore full opacity for non-compact modes
-    if (this._displayMode !== 'compact' && renderer) {
-      annotations.forEach(function (ann) {
-        var el = renderer._elements[ann.id];
-        if (el) el.style.opacity = '1';
-      });
-    }
   };
 
   // ---- Export ----
@@ -622,6 +628,178 @@
         });
       }
     }, 50);
+  };
+
+  // ---- Page-Level Notes Area (v2.2) ----
+
+  NotesAnnotationsTab.prototype._drawPageNotes = function(container) {
+    var self = this;
+    var currentPageId = this._state.get('annotations.currentPageId');
+    var annotations = this._state.get('annotations.list') || [];
+
+    var section = document.createElement('div');
+    section.className = 'cc-na-page-section';
+
+    var label = document.createElement('div');
+    label.className = 'cc-na-page-label';
+
+    var labelText = document.createElement('span');
+    labelText.textContent = '\u5F53\u524D\u9875\u9762\u5907\u6CE8';
+    label.appendChild(labelText);
+
+    var importLink = document.createElement('button');
+    importLink.className = 'cc-na-page-import-link';
+    importLink.textContent = '\u5BFC\u5165\u6807\u6CE8';
+    importLink.title = '\u5BFC\u5165 JSON/MD/PRD \u6807\u6CE8\u6570\u636E';
+    importLink.addEventListener('click', function() {
+      self._openImportDialog();
+    });
+    label.appendChild(importLink);
+
+    section.appendChild(label);
+
+    var ta = document.createElement('textarea');
+    ta.className = 'cc-na-page-textarea';
+    ta.placeholder = '\u8F93\u5165\u5F53\u524D\u9875\u9762\u7684\u6574\u4F53\u5907\u6CE8...';
+
+    // Load existing page-level notes (no target, current page)
+    var pageAnns = annotations.filter(function(a) {
+      return (!a.target || a.target === '') && a.pageId === currentPageId && a.type === 'sticky';
+    });
+    ta.value = pageAnns.map(function(a) { return a.text || ''; }).join('\n');
+
+    var saveTimer = null;
+    ta.addEventListener('blur', function() {
+      clearTimeout(saveTimer);
+      var text = ta.value.trim();
+      // Remove existing page-level annotations for this page
+      var toRemove = [];
+      for (var i = 0; i < annotations.length; i++) {
+        var a = annotations[i];
+        if ((!a.target || a.target === '') && a.pageId === currentPageId && a.type === 'sticky') {
+          toRemove.push(a.id);
+        }
+      }
+      // Remove old ones
+      for (var j = 0; j < toRemove.length; j++) {
+        self._bus.emit('annotation:remove', { id: toRemove[j] });
+      }
+      // Create new page-level annotation if text is not empty
+      if (text) {
+        var annotator = window.__CC && window.__CC.annotator;
+        if (annotator) {
+          var canvasEl = self._state.canvas;
+          var annX = 10, annY = 10;
+          if (canvasEl) {
+            var rect = canvasEl.getBoundingClientRect();
+            annX = Math.round(rect.width - 220);
+            annY = 10;
+          }
+          var ann = annotator.create({
+            type: 'sticky',
+            x: annX,
+            y: annY,
+            w: 200,
+            h: 60,
+            text: text,
+            color: '#d48806',
+            status: 'pending',
+            pageId: currentPageId || null,
+            target: null
+          });
+          var renderer = window.__CC && window.__CC.annotationRenderer;
+          if (renderer && ann) renderer.render(ann);
+        }
+      }
+    });
+    ta.addEventListener('input', function() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(function() { ta.blur(); }, 3000);
+    });
+
+    section.appendChild(ta);
+    container.appendChild(section);
+  };
+
+  // ---- Batch Add Dialog (v2.2) ----
+
+  NotesAnnotationsTab.prototype._openBatchAddDialog = function() {
+    var self = this;
+    var currentPageId = this._state.get('annotations.currentPageId');
+
+    var html = '<div class="cc-comp-form">' +
+      '<div class="cc-comp-row"><label>\u5185\u5BB9\uFF08\u6BCF\u884C\u4E00\u4E2A\u6807\u6CE8\uFF09</label>' +
+      '<textarea class="cc-comp-input cc-comp-textarea" id="cc-na-batch-text" rows="8" ' +
+      'placeholder="\u7B2C\u4E00\u884C\u662F\u4E00\u4E2A\u6807\u6CE8\n\u7B2C\u4E8C\u884C\u662F\u53E6\u4E00\u4E2A\u6807\u6CE8\n..."></textarea></div>' +
+      '<div class="cc-comp-row"><label>\u6240\u5C5E\u6A21\u5757</label>' +
+      '<input class="cc-comp-input" id="cc-na-batch-module" placeholder="\u5982: \u767B\u5F55\u6A21\u5757"></div>' +
+      '<div class="cc-comp-row"><label>\u4F18\u5148\u7EA7</label>' +
+      '<select class="cc-comp-input" id="cc-na-batch-priority">' +
+      '<option value="high">\u9AD8</option>' +
+      '<option value="medium" selected>\u4E2D</option>' +
+      '<option value="low">\u4F4E</option></select></div>' +
+      '</div>';
+
+    var modal = window.CCModal;
+    if (!modal) return;
+
+    modal.show('\u6279\u91CF\u6DFB\u52A0\u5907\u6CE8', html, [
+      { text: '\u53D6\u6D88', cls: '', fn: function (d) { if (d && d.parentElement) d.parentElement.remove(); } },
+      {
+        text: '\u6DFB\u52A0', cls: 'primary', fn: function (d) {
+          var textEl = document.getElementById('cc-na-batch-text');
+          var moduleEl = document.getElementById('cc-na-batch-module');
+          var priorityEl = document.getElementById('cc-na-batch-priority');
+
+          var rawText = textEl ? textEl.value.trim() : '';
+          if (!rawText) return;
+
+          var lines = rawText.split('\n').filter(function(l) { return l.trim().length > 0; });
+          if (lines.length === 0) return;
+
+          var annotator = window.__CC && window.__CC.annotator;
+          if (!annotator) return;
+
+          var canvasEl = self._state.canvas;
+          var cols = Math.ceil(Math.sqrt(lines.length));
+          var cellW = 200, cellH = 80, gap = 20;
+          var startX = 50, startY = 50;
+          if (canvasEl) {
+            var rect = canvasEl.getBoundingClientRect();
+            startX = Math.round(rect.width / 2 - (cols * (cellW + gap)) / 2);
+            startY = 50;
+          }
+
+          var renderer = window.__CC && window.__CC.annotationRenderer;
+          var count = 0;
+          lines.forEach(function(line, i) {
+            var col = i % cols;
+            var row = Math.floor(i / cols);
+            var ann = annotator.create({
+              type: 'sticky',
+              x: startX + col * (cellW + gap),
+              y: startY + row * (cellH + gap),
+              w: cellW,
+              h: cellH,
+              text: line.trim(),
+              color: '#d48806',
+              status: 'pending',
+              module: moduleEl ? moduleEl.value : '',
+              priority: priorityEl ? priorityEl.value : 'medium',
+              pageId: currentPageId || null
+            });
+            if (renderer && ann) renderer.render(ann);
+            count++;
+          });
+
+          if (window.__CC && window.__CC.toast) {
+            window.__CC.toast.show('\u5DF2\u6DFB\u52A0 ' + count + ' \u6761\u5907\u6CE8', 'success');
+          }
+          if (d && d.parentElement) d.parentElement.remove();
+          self._drawList();
+        }
+      }
+    ]);
   };
 
   // ---- Filter ----

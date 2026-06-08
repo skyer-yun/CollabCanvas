@@ -162,7 +162,7 @@
   };
 
   AnnotationRenderer.prototype._renderRect = function(ann) {
-    var g = this._svgEl('g', {});
+    var g = this._svgEl('g', { style: 'pointer-events:all;cursor:pointer' });
     var r = this._svgEl('rect', {
       x: ann.x, y: ann.y, width: ann.w, height: ann.h,
       fill: this._hexToRGBA(ann.color || '#1677ff', 0.12),
@@ -229,7 +229,7 @@
   };
 
   AnnotationRenderer.prototype._renderNumber = function(ann) {
-    var g = this._svgEl('g', {});
+    var g = this._svgEl('g', { style: 'pointer-events:all;cursor:pointer' });
     var c = this._svgEl('circle', {
       cx: ann.x, cy: ann.y, r: 16,
       fill: ann.color || '#1677ff', stroke: '#fff', 'stroke-width': 2
@@ -247,7 +247,7 @@
   };
 
   AnnotationRenderer.prototype._renderText = function(ann) {
-    var g = this._svgEl('g', {});
+    var g = this._svgEl('g', { style: 'pointer-events:all;cursor:pointer' });
     var t = this._svgEl('text', {
       x: ann.x, y: ann.y, 'font-size': 14, fill: '#1f1f1f', 'font-weight': '500'
     });
@@ -257,7 +257,7 @@
   };
 
   AnnotationRenderer.prototype._renderSticky = function(ann) {
-    var g = this._svgEl('g', {});
+    var g = this._svgEl('g', { style: 'pointer-events:all;cursor:pointer' });
     var r = this._svgEl('rect', {
       x: ann.x, y: ann.y, width: ann.w || 180, height: ann.h || 100,
       fill: '#fffbe6', stroke: '#ffe58f', 'stroke-width': 2, rx: 6,

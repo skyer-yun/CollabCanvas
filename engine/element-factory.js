@@ -25,10 +25,20 @@
       table:     { label: '表格',   icon: '⊞',   w: 400, h: 200, group: '高级' },
       tree:      { label: '树形',   icon: '⚐',   w: 240, h: 200, group: '高级' },
       hotspot:   { label: '热区',   icon: '◎',   w: 80,  h: 80,  group: '高级' },
-      sticky:    { label: '便签',   icon: '📝',  w: 180, h: 160, group: '高级' },
-      number:    { label: '编号',   icon: '#',   w: 36,  h: 36,  group: '高级' }
+      sticky:    { label: '便签',   icon: '\u25A3', w: 180, h: 160, group: null },  // hidden from component panel; CREATORS retained for internal use
+      number:    { label: '编号',   icon: '#',   w: 36,  h: 36,  group: '高级' },
+      // Annotation overlay tools (drawn on SVG overlay, not canvas elements)
+      'ann-arrow':   { label: '箭头', icon: '\u2192', w: 0, h: 0, group: '标注', annTool: 'arrow' },
+      'ann-rect':    { label: '矩形框', icon: '\u25A1', w: 0, h: 0, group: '标注', annTool: 'rect' },
+      'ann-text':    { label: '文字标注', icon: 'T', w: 0, h: 0, group: '标注', annTool: 'text' },
+      'ann-measure': { label: '测量', icon: '\u2571', w: 0, h: 0, group: '标注', annTool: 'measure' },
+      'ann-sticky':  { label: '便签标注', icon: '\u25A3', w: 0, h: 0, group: '标注', annTool: 'sticky' },
+      'ann-number':  { label: '编号标注', icon: '\u2460', w: 0, h: 0, group: '标注', annTool: 'number' },
+      'ann-brush':   { label: '画笔', icon: '\u270E', w: 0, h: 0, group: '标注', annTool: 'brush' },
+      'ann-mosaic':  { label: '马赛克', icon: '\u2592', w: 0, h: 0, group: '标注', annTool: 'mosaic' },
+      'ann-region':  { label: '区域', icon: '\u2504', w: 0, h: 0, group: '标注', annTool: 'region' }
     },
-    GROUPS: ['基础', '形状', '媒体', '表单', '容器', '高级'],
+    GROUPS: ['基础', '形状', '媒体', '表单', '容器', '高级', '标注'],
     getTypeNames: function () {
       return Object.keys(this.TYPES);
     },
@@ -41,6 +51,13 @@
     getTypesByGroup: function (group) {
       var self = this;
       return Object.keys(self.TYPES).filter(function (k) { return self.TYPES[k].group === group; });
+    },
+    isAnnotationTool: function (name) {
+      return !!(this.TYPES[name] && this.TYPES[name].annTool);
+    },
+    getAnnotationToolName: function (name) {
+      var def = this.TYPES[name];
+      return def ? def.annTool || null : null;
     }
   };
 
@@ -387,6 +404,16 @@
 
       this.eventBus.emit('element:created', { element: el, type: type });
       return el;
+    }
+
+    /**
+     * Create an element by type without appending to canvas or tracking.
+     * Used internally (e.g., annotation-to-element conversion).
+     */
+    createElementByType(type, x, y) {
+      var creator = CREATORS[type];
+      if (!creator) return null;
+      return creator(x, y);
     }
 
     /**

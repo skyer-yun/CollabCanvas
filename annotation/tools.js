@@ -47,10 +47,10 @@
     this._active = toolName;
     this._state.set('annotations.currentTool', toolName);
 
-    var overlay = this.getOverlay();
-    if (overlay) {
-      overlay.style.pointerEvents = 'auto';
-      overlay.style.cursor = 'crosshair';
+    // Set crosshair cursor on canvas element (not overlay)
+    var canvasEl = this._state.canvas;
+    if (canvasEl) {
+      canvasEl.style.cursor = 'crosshair';
     }
   };
 
@@ -61,15 +61,22 @@
     this._brushPoints = [];
     this._state.set('annotations.currentTool', null);
 
-    var overlay = this.getOverlay();
-    if (overlay) {
-      overlay.style.pointerEvents = 'none';
-      overlay.style.cursor = 'default';
+    // Restore default cursor on canvas element
+    var canvasEl = this._state.canvas;
+    if (canvasEl) {
+      canvasEl.style.cursor = 'default';
     }
   };
 
   AnnotationTools.prototype.getActiveTool = function() {
     return this._active;
+  };
+
+  /**
+   * Returns true if a drawing operation is in progress.
+   */
+  AnnotationTools.prototype.isDrawing = function() {
+    return !!this._drawing;
   };
 
   // ---- Pointer events ----
@@ -241,12 +248,6 @@
     // Guard: don't create another text if one is being edited
     if (this._currentEl) return;
 
-    // Temporarily disable overlay so contentEditable div can receive focus
-    var overlay = this.getOverlay();
-    if (overlay) {
-      overlay.style.pointerEvents = 'none';
-    }
-
     var div = document.createElement('div');
     div.className = 'cc-ann-text';
     div.contentEditable = true;
@@ -282,12 +283,6 @@
         });
       }
       self._currentEl = null;
-      // Restore overlay pointer events
-      var ol = self.getOverlay();
-      if (ol && self._active) {
-        ol.style.pointerEvents = 'auto';
-        ol.style.cursor = 'crosshair';
-      }
     });
   };
 
@@ -340,12 +335,6 @@
     // Guard: don't create another sticky if one is being edited
     if (this._currentEl) return;
 
-    // Temporarily disable overlay so contentEditable div can receive focus
-    var overlay = this.getOverlay();
-    if (overlay) {
-      overlay.style.pointerEvents = 'none';
-    }
-
     var div = document.createElement('div');
     div.className = 'cc-ann-sticky';
     div.style.cssText = 'position:absolute;left:' + pt.x + 'px;top:' + pt.y +
@@ -391,12 +380,6 @@
         });
       }
       self._currentEl = null;
-      // Restore overlay pointer events
-      var ol = self.getOverlay();
-      if (ol && self._active) {
-        ol.style.pointerEvents = 'auto';
-        ol.style.cursor = 'crosshair';
-      }
     });
   };
 

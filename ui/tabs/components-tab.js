@@ -11,7 +11,7 @@
   var reg = window.CCComponentRegistry;
   var INSERT_ITEMS = reg ? reg.getTypeNames().map(function (name) {
     var def = reg.TYPES[name];
-    return { type: name, label: def.label, icon: def.icon, group: def.group };
+    return { type: name, label: def.label, icon: def.icon, group: def.group, annTool: def.annTool || null };
   }) : [];
 
   var GROUP_ORDER = reg ? reg.GROUPS : ['基础','形状','媒体','表单','容器','高级'];
@@ -114,12 +114,18 @@
         items.forEach(function (comp) {
           var card = document.createElement('div');
           card.className = 'cc-comp-item';
+          if (comp.annTool) card.setAttribute('data-ann-tool', comp.annTool);
           card.title = comp.label + ' (' + comp.type + ')';
           card.innerHTML = '<span class="cc-comp-icon">' + comp.icon + '</span>' +
             '<span class="cc-comp-label">' + domUtils.esc(comp.label) + '</span>';
 
           card.addEventListener('click', function () {
-            self.bus.emit('placement:start', { type: comp.type });
+            // Annotation tools activate overlay drawing, not canvas element placement
+            if (comp.annTool) {
+              self.bus.emit('annotation:tool-select', comp.annTool);
+            } else {
+              self.bus.emit('placement:start', { type: comp.type });
+            }
           });
 
           grid.appendChild(card);

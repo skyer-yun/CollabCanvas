@@ -63,15 +63,12 @@
     var shellResult = shell.create();
     var toolbarResult = toolbar.create();
     var toolbarEl = toolbarResult.toolbar;
-    var annBarEl = toolbarResult.annBar;
     var leftResult = leftPanel.create();
     var rightResult = rightPanel.create();
     var statusbarEl = statusbar.create();
 
     // Assemble layout: replace shell placeholder elements with actual UI components
     shellResult.toolbar.replaceWith(toolbarEl);
-    // Insert annotation sub-bar after toolbar
-    toolbarEl.parentNode.insertBefore(annBarEl, toolbarEl.nextSibling);
     shellResult.leftPanel.replaceWith(leftResult.container);
     shellResult.rightPanel.replaceWith(rightResult.container);
     shellResult.statusbar.replaceWith(statusbarEl);
@@ -604,6 +601,23 @@
         return;
       }
 
+      // Annotation tool intercept: active tool and not clicking existing annotation
+      var activeAnnTool = annotationTools.getActiveTool();
+      if (activeAnnTool) {
+        var annEl = e.target.closest('[data-ann-id]');
+        if (!annEl) {
+          // If clicking a canvas child, select it first (annotation still starts)
+          if (dom.isCanvasChild(e.target)) {
+            selection.select(e.target);
+            transform.createResizeHandles();
+            transform.createRotateHandle();
+          }
+          annotationTools.onMouseDown(e);
+          return; // Don't enter normal selection/drag logic
+        }
+        // Click on existing annotation → let it fall through to selection/edit
+      }
+
       // Select element
       if (e.shiftKey && state.selected) {
         selection.toggleMultiSelect(target);
@@ -629,6 +643,12 @@
       // Update clipboard mouse position
       state.set('clipboard.mousePos', { x: e.clientX, y: e.clientY });
 
+      // Annotation drawing in progress
+      if (annotationTools.isDrawing()) {
+        annotationTools.onMouseMove(e);
+        return;
+      }
+
       // Handle active drag
       if (state.get('drag')) {
         transform.handleDragMove(e);
@@ -638,6 +658,12 @@
 
     // mouseup: end drag
     _domHandlers.docMouseup = function(e) {
+      // Annotation drawing in progress
+      if (annotationTools.isDrawing()) {
+        annotationTools.onMouseUp(e);
+        return;
+      }
+
       if (state.get('drag')) {
         transform.handleDragEnd(e);
       }
@@ -679,9 +705,31 @@
       // If target is a sticky element, add "promote to annotation" action
       var stickyEl = e.target.closest('[data-type="sticky"]');
       if (stickyEl && annotator) {
-        actions['promote-to-annotation'] = function() {
-          _promoteStickyToAnnotation(stickyEl);
-        };
+        // v2.3: skip if already linked as annotation
+        if (!stickyEl.getAttribute('data-cc-ann-linked')) {
+          actions['promote-to-annotation'] = function() {
+            _promoteStickyToAnnotation(stickyEl);
+          };
+        }
+      }
+
+      // v2.3: If right-clicked on an annotation SVG element, show annotation context menu
+      var annEl = e.target.closest('[data-ann-id]');
+      if (annEl && annotator) {
+        var annId = annEl.getAttribute('data-ann-id');
+        var ann = annotator.getById(annId);
+        if (ann && (ann.type === 'sticky' || ann.type === 'text' || ann.type === 'number')) {
+          actions = {};  // Replace default actions with annotation-specific ones
+          actions['ann-to-element'] = function() { _convertAnnotationToElement(annId); };
+          actions['ann-edit'] = function() { bus.emit('annotation:edit-request', { id: annId }); };
+          actions['ann-delete'] = function() {
+            annotator.remove(annId);
+            annotationRenderer.remove(annId);
+            CC.toast.show('标注已删除', 'info');
+          };
+          contextMenu.show(e, e.target, actions);
+          return;
+        }
       }
 
       // If in edit mode with a selected element, add "add note" action
@@ -843,11 +891,8 @@
           selection.deselect();
           transform.removeResizeHandles();
           transform.removeRotateHandle();
-          // Deactivate annotation tools + collapse sub-bar
+          // Deactivate annotation tools
           annotationTools.deactivate();
-          var annToggleBtn = toolbar.el.querySelector('.cc-btn-ann-toggle');
-          if (annToggleBtn) annToggleBtn.classList.remove('active');
-          if (toolbar._annBar) toolbar._annBar.style.display = 'none';
           toast.show('预览模式 — 页面可交互', 'info');
           break;
 
@@ -863,7 +908,6 @@
             editOverlay = annotationRenderer.createOverlay(canvasEl);
           }
           editOverlay.style.display = '';
-          editOverlay.style.pointerEvents = 'none';
           // Re-render saved annotations
           var editSavedAnns = state.get('annotations.list') || [];
           for (var esi = 0; esi < editSavedAnns.length; esi++) {
@@ -962,7 +1006,7 @@
       toast.show('\u8BF7\u5728\u53F3\u4FA7\u300C\u7248\u672C\u300D\u9762\u677F\u9009\u62E9\u7248\u672C\u8FDB\u884C\u5BF9\u6BD4', 'info');
     });
 
-    // Annotation sub-bar tool selection
+    // Annotation tool selection (from component panel click)
     bus.on('annotation:tool-select', function(toolName) {
       if (state.get('mode.current') !== 'edit') {
         toast.show('请先进入编辑模式', 'info');
@@ -978,60 +1022,14 @@
       _bindAnnotationEvents();
 
       annotationTools.activate(toolName);
-      // Enable pointer events on overlay while tool is active
-      toolOverlay.style.pointerEvents = 'auto';
-      // Sync the annotation sub-bar buttons
-      var annBar = document.querySelector('.cc-toolbar-annotate-bar');
-      if (annBar) {
-        annBar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
-          b.classList.toggle('active', b.getAttribute('data-ann-tool') === toolName);
-        });
-      }
+      toast.show('标注工具: ' + toolName + ' — 在画布上操作', 'info');
     });
 
     // Annotation tool deactivate (toggle collapsed or Escape)
     bus.on('annotation:tool-deactivate', function() {
       annotationTools.deactivate();
-      // Restore overlay pointer-events to none
-      var deactOverlay = annotationRenderer.getOverlay();
-      if (deactOverlay) deactOverlay.style.pointerEvents = 'none';
-      // Deactivate sub-bar buttons
-      var deactAnnBar = document.querySelector('.cc-toolbar-annotate-bar');
-      if (deactAnnBar) {
-        deactAnnBar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
-          b.classList.remove('active');
-        });
-      }
     });
 
-    bus.on('annotation:display-mode', function(mode) {
-      var overlay = canvasEl.querySelector('.cc-annotation-overlay');
-      if (!overlay) return;
-      var annotations = state.get('annotations.list') || [];
-      var annRenderer = CC.annotationRenderer;
-
-      switch (mode) {
-        case 'full':
-          overlay.style.opacity = '1';
-          overlay.style.display = '';
-          annotations.forEach(function(ann) {
-            var el = annRenderer._elements[ann.id];
-            if (el) el.style.opacity = '1';
-          });
-          break;
-        case 'compact':
-          overlay.style.opacity = '1';
-          overlay.style.display = '';
-          annotations.forEach(function(ann) {
-            var el = annRenderer._elements[ann.id];
-            if (el) el.style.opacity = ann.type === 'number' ? '1' : '0.3';
-          });
-          break;
-        case 'hidden':
-          overlay.style.display = 'none';
-          break;
-      }
-    });
     bus.on('toolbar:export', function() {
       // Export changelog as .md download
       var md = exportEngine.exportInstructions();
@@ -1060,13 +1058,34 @@
         toast.show('请先进入编辑模式', 'info');
         return;
       }
-      var opened = toolbar._toggleAnnotationBar();
-      if (!opened) {
-        // Collapsed — deactivate any active tool
-        annotationTools.deactivate();
-        var colOverlay = annotationRenderer.getOverlay();
-        if (colOverlay) colOverlay.style.pointerEvents = 'none';
+      // Switch left panel to components tab and expand annotation group
+      var lpHeader = document.querySelector('.cc-left-panel .cc-panel-header');
+      if (lpHeader) {
+        var compTab = lpHeader.querySelector('[data-tab="components"]');
+        if (compTab) compTab.click();
       }
+      // Expand annotation group in component panel
+      setTimeout(function() {
+        var annSection = null;
+        var sections = document.querySelectorAll('.cc-comp-section');
+        for (var si = 0; si < sections.length; si++) {
+          var hdr = sections[si].querySelector('.cc-comp-header');
+          if (hdr && hdr.textContent.indexOf('标注') !== -1) {
+            annSection = sections[si];
+            break;
+          }
+        }
+        if (annSection) {
+          // Ensure expanded
+          var arrow = annSection.querySelector('.cc-comp-arrow');
+          if (arrow && arrow.textContent === '\u25B6') {
+            hdr = annSection.querySelector('.cc-comp-header');
+            if (hdr) hdr.click();
+          }
+          annSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        toast.show('标注工具在左侧组件面板「标注」分组', 'info');
+      }, 100);
     });
 
     // Toolbar: Export PNG
@@ -1164,18 +1183,6 @@
       _bindAnnotationEvents();
 
       annotationTools.activate(data.tool);
-      atOverlay.style.pointerEvents = 'auto';
-      // Expand annotation sub-bar if collapsed
-      if (toolbar._annBar) toolbar._annBar.style.display = 'flex';
-      var annToggleUpd = toolbar.el.querySelector('.cc-btn-ann-toggle');
-      if (annToggleUpd) annToggleUpd.classList.add('active');
-      // Sync annotation sub-bar buttons
-      var annBar = document.querySelector('.cc-toolbar-annotate-bar');
-      if (annBar) {
-        annBar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
-          b.classList.toggle('active', b.getAttribute('data-ann-tool') === data.tool);
-        });
-      }
     });
 
     // New annotation request → activate default tool
@@ -1195,17 +1202,6 @@
 
       // Activate arrow tool by default
       annotationTools.activate('arrow');
-      nrOverlay.style.pointerEvents = 'auto';
-      // Expand sub-bar + sync buttons
-      if (toolbar._annBar) toolbar._annBar.style.display = 'flex';
-      var nrToggle = toolbar.el.querySelector('.cc-btn-ann-toggle');
-      if (nrToggle) nrToggle.classList.add('active');
-      var annBar = document.querySelector('.cc-toolbar-annotate-bar');
-      if (annBar) {
-        annBar.querySelectorAll('.cc-ann-tool-btn').forEach(function(b) {
-          b.classList.toggle('active', b.getAttribute('data-ann-tool') === 'arrow');
-        });
-      }
     });
 
     // Tool complete → persist annotation to state
@@ -1891,6 +1887,47 @@
     CC.toast.show('便签已转为标注 ' + ann.id, 'success');
   }
 
+  /**
+   * v2.3: Convert an annotation (sticky/text/number) to a canvas sticky element.
+   * Uses factory.createElementByType to bypass component panel registration.
+   */
+  function _convertAnnotationToElement(annId) {
+    var ann = annotator.getById(annId);
+    if (!ann) return;
+
+    // Create sticky element via internal factory method
+    var el = factory.createElementByType('sticky', ann.x, ann.y);
+    if (!el) {
+      CC.toast.show('创建元素失败', 'error');
+      return;
+    }
+
+    // Fill in text content
+    var content = el.querySelector('.cc-sticky-content');
+    if (content && ann.text) content.textContent = ann.text;
+
+    // Append to canvas
+    var canvasEl = state.canvas;
+    canvasEl.appendChild(el);
+
+    // Track creation
+    changeTracker.record('insert', {
+      element: el,
+      html: el.outerHTML
+    }, null, { elementId: el.id });
+    bus.emit('element:created', { element: el, type: 'sticky' });
+
+    // Mark as linked
+    el.setAttribute('data-cc-ann-linked', 'true');
+    el.setAttribute('data-cc-ann-id', ann.id);
+
+    // Remove annotation
+    annotator.remove(annId);
+    annotationRenderer.remove(annId);
+
+    CC.toast.show('已转为画布便签', 'success');
+  }
+
   function showHelp() {
     var s = 'font-size:12px;line-height:1.9;color:#333;';
     var h4 = 'margin:14px 0 6px;color:#1677ff;font-size:13px;border-bottom:1px solid #e8e8e8;padding-bottom:4px;';
@@ -2008,44 +2045,49 @@
   }
 
   function _bindAnnotationEvents() {
-    // Bind annotation mouse events to overlay (called each time toolbar is shown)
-    var overlay = CC.annotationRenderer.getOverlay();
-    if (!overlay || overlay._ccEventsBound) return;
-    overlay._ccEventsBound = true;
+    // v2.2: Annotation drawing events are now handled at canvas level
+    // (canvasMousedown/docMousemove/docMouseup intercept annotationTools).
+    // This function binds dblclick (edit) and click (focus/locate) on annotations.
+    if (CC._annDblClickBound) return;
+    CC._annDblClickBound = true;
 
-    overlay.addEventListener('mousedown', function(e) {
-      if (CC.annotationTools.getActiveTool()) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      CC.annotationTools.onMouseDown(e);
-    });
-    overlay.addEventListener('mousemove', function(e) {
-      CC.annotationTools.onMouseMove(e);
-    });
-    overlay.addEventListener('mouseup', function(e) {
-      CC.annotationTools.onMouseUp(e);
-    });
-    // Double-click on existing annotation to edit it
-    overlay.addEventListener('dblclick', function(e) {
+    var el = CC.state ? CC.state.canvas : null;
+    if (!el) return;
+
+    // Double-click annotation → edit
+    el.addEventListener('dblclick', function(e) {
+      // Walk up to find annotation group with data-ann-id
       var target = e.target;
-      // Walk up to find the group with data-ann-id
-      while (target && target !== overlay) {
+      while (target && target !== el) {
         var annId = target.getAttribute('data-ann-id');
         if (annId) {
           e.preventDefault();
           e.stopPropagation();
-          var ann = annotator.getById(annId);
-          if (ann && CC.componentDialog) {
-            // Open annotation editor directly
-            bus.emit('annotation:edit-request', { id: annId });
-          }
+          bus.emit('annotation:edit-request', { id: annId });
           return;
         }
         target = target.parentElement;
       }
     });
+
+    // Single-click annotation → locate in right panel
+    el.addEventListener('click', function(e) {
+      var annGroup = e.target.closest('[data-ann-id]');
+      if (annGroup) {
+        bus.emit('annotation:focus', { id: annGroup.getAttribute('data-ann-id') });
+      }
+    });
   }
+
+  // annotation:focus → switch right panel to notes tab & scroll to annotation
+  bus.on('annotation:focus', function(data) {
+    var rpHeader = document.querySelector('.cc-right-panel .cc-panel-header');
+    if (rpHeader) {
+      var notesTab = rpHeader.querySelector('[data-tab="notes-annotations"]');
+      if (notesTab) notesTab.click();
+    }
+    bus.emit('notes-tab:scroll-to', { id: data.id });
+  });
 
   // ==================== Shutdown ====================
   function shutdown() {
