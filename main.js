@@ -1272,6 +1272,16 @@
       // Just highlight, no mode switch needed
     });
 
+    // v2.3: Click annotation on canvas → locate in right panel
+    bus.on('annotation:focus', function(data) {
+      var rpHeader = document.querySelector('.cc-right-panel .cc-panel-header');
+      if (rpHeader) {
+        var notesTab = rpHeader.querySelector('[data-tab="notes-annotations"]');
+        if (notesTab) notesTab.click();
+      }
+      bus.emit('notes-tab:scroll-to', { id: data.id });
+    });
+
     // Delete annotation
     bus.on('annotation:delete-request', function(data) {
       if (data.id) {
@@ -1832,7 +1842,7 @@
    * Copies content + position into annotator, marks sticky as linked.
    */
   function _promoteStickyToAnnotation(stickyEl) {
-    if (!annotator) {
+    if (!CC.annotator) {
       CC.toast.show('标注系统未初始化', 'info');
       return;
     }
@@ -1854,11 +1864,11 @@
     var h = parseFloat(stickyEl.style.height) || stickyEl.offsetHeight || 160;
 
     // Read annotation defaults from settings
-    var annSettings = state.get('settings.annotations') || {};
+    var annSettings = CC.state.get('settings.annotations') || {};
     var defaultColor = annSettings.defaultColor || '#d48806';
     var defaultStatus = annSettings.defaultStatus || 'pending';
 
-    var ann = annotator.create({
+    var ann = CC.annotator.create({
       type: 'sticky',
       x: pos.left,
       y: pos.top,
@@ -1892,11 +1902,11 @@
    * Uses factory.createElementByType to bypass component panel registration.
    */
   function _convertAnnotationToElement(annId) {
-    var ann = annotator.getById(annId);
+    var ann = CC.annotator.getById(annId);
     if (!ann) return;
 
     // Create sticky element via internal factory method
-    var el = factory.createElementByType('sticky', ann.x, ann.y);
+    var el = CC.factory.createElementByType('sticky', ann.x, ann.y);
     if (!el) {
       CC.toast.show('创建元素失败', 'error');
       return;
@@ -1907,23 +1917,23 @@
     if (content && ann.text) content.textContent = ann.text;
 
     // Append to canvas
-    var canvasEl = state.canvas;
+    var canvasEl = CC.state.canvas;
     canvasEl.appendChild(el);
 
     // Track creation
-    changeTracker.record('insert', {
+    CC.changeTracker.record('insert', {
       element: el,
       html: el.outerHTML
     }, null, { elementId: el.id });
-    bus.emit('element:created', { element: el, type: 'sticky' });
+    CC.bus.emit('element:created', { element: el, type: 'sticky' });
 
     // Mark as linked
     el.setAttribute('data-cc-ann-linked', 'true');
     el.setAttribute('data-cc-ann-id', ann.id);
 
     // Remove annotation
-    annotator.remove(annId);
-    annotationRenderer.remove(annId);
+    CC.annotator.remove(annId);
+    CC.annotationRenderer.remove(annId);
 
     CC.toast.show('已转为画布便签', 'success');
   }
@@ -2074,20 +2084,10 @@
     el.addEventListener('click', function(e) {
       var annGroup = e.target.closest('[data-ann-id]');
       if (annGroup) {
-        bus.emit('annotation:focus', { id: annGroup.getAttribute('data-ann-id') });
+        CC.bus.emit('annotation:focus', { id: annGroup.getAttribute('data-ann-id') });
       }
     });
   }
-
-  // annotation:focus → switch right panel to notes tab & scroll to annotation
-  bus.on('annotation:focus', function(data) {
-    var rpHeader = document.querySelector('.cc-right-panel .cc-panel-header');
-    if (rpHeader) {
-      var notesTab = rpHeader.querySelector('[data-tab="notes-annotations"]');
-      if (notesTab) notesTab.click();
-    }
-    bus.emit('notes-tab:scroll-to', { id: data.id });
-  });
 
   // ==================== Shutdown ====================
   function shutdown() {
